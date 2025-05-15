@@ -153,7 +153,7 @@ if __name__ == "__main__":
         "epochs": 500,
         "batch_size": 48,
         "lr": 7*4e-4,
-        "model_path": "/home/davidchaparro/Datasets/MultiChannelRME04Sats_Train/models/retinanet_weights_E42.pt",
+        # "model_path": "/home/davidchaparro/Datasets/MultiChannelRME04Sats_Train/models/retinanet_weights_E42.pt",
         "training_dir": "/home/davidchaparro/Datasets/MultiChannelRME04Sats_Train/train",
         "validation_dir": "/home/davidchaparro/Datasets/MultiChannelRME04Sats_Train/val",
     }
@@ -161,7 +161,7 @@ if __name__ == "__main__":
     # Custom transforms (RetinaNet expects images and targets)
     transform = T.Compose([
         T.ToTensor(),
-        T.RandomHorizontalFlip(0.5),
+        # T.RandomHorizontalFlip(0.5),
         # T.Resize(1024),
     ])
 
