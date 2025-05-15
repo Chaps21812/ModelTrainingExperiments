@@ -271,7 +271,7 @@ def centroid_accuracy(preds:list, targets:list) -> dict:
     recall = TP/(TP+FN+1e-8)
     precision = TP/(TP+FP+1e-8)
     f1 = precision*recall/(precision+recall+1e-8)
-    return {"Anchor F1": f1, "Anchor Precision": precision, "Anchor Recall ": recall}
+    return {"Anchor_F1": f1, "Anchor_Precision": precision, "Anchor_Recall ": recall}
 
 
 

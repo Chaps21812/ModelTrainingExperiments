@@ -18,6 +18,8 @@ def plot_prediction_bbox(images, predictions, targets, output_dir, epoch):
 
         zscaled_image = zscale(image[0,:,:].detach().cpu().numpy())[0,:,:]
 
+        plt.clf() 
+        plt.close('all')
         fig, ax = plt.subplots()
         plt.title(f"{id} Predictions and Targets S{index} E{epoch}")
         img_hwc = np.transpose(image.detach().cpu(), (1, 2, 0))
@@ -51,6 +53,7 @@ def plot_prediction_bbox(images, predictions, targets, output_dir, epoch):
         plt.close()
         torch.cuda.empty_cache()
         mlflow.log_artifact(image_path)
+    plt.close()
 
 def plot_prediction_bbox_annotation(images, predictions, targets, output_dir, epoch, padding = 30):
     os.makedirs(os.path.join(output_dir, "evaluation_images"), exist_ok=True)
@@ -62,6 +65,8 @@ def plot_prediction_bbox_annotation(images, predictions, targets, output_dir, ep
 
             # Convert to HWC for matplotlib
 
+        plt.clf() 
+        plt.close('all')
         fig, ax = plt.subplots()
         plt.title(f"{id} Predictions and Targets S{index} E{epoch}")
         img_hwc = np.transpose(image.detach().cpu(), (1, 2, 0))
@@ -98,3 +103,4 @@ def plot_prediction_bbox_annotation(images, predictions, targets, output_dir, ep
             plt.close()
             torch.cuda.empty_cache()
             mlflow.log_artifact(image_path)
+    plt.close()

@@ -3,6 +3,7 @@ import pickle
 import re
 import matplotlib.pyplot as plt
 import os
+import mlflow
 
 
 class Dataset_study():
@@ -16,7 +17,7 @@ class Dataset_study():
             match = re.search(r'\d{4}-\d{2}-\d{2}', path)
             if match is not None:
                 self.path_to_date[path] = match.group()
-                self.basename = path.split(match.group())[0]
+                self.basename = os.path.basename(path.split(match.group())[0])
 
         self.output_directory = out_put_directory
         self.figure_folder = os.path.join(self.output_directory, "figures")
@@ -66,16 +67,20 @@ class Dataset_study():
     def plot_metric(self, metric:str):
         self.dataframe = self.dataframe.sort_values(by="date")
         save_path = os.path.join(self.figure_folder, f"{metric}-{self.basename}.png")
-        plt.plot(self.dataframe["date"], self.dataframe[metric], '-', color="teal")
-        plt.xticks(self.dataframe["date"])
+        plt.clf() 
+        plt.close('all')
+        plt.figure(figsize=(10, 12)) 
+        plt.plot(self.dataframe["date"], self.dataframe[metric], color="teal")
+        plt.xticks(self.dataframe["date"].tolist(), rotation=45)
         plt.xlabel("Dataset Date")
         plt.ylabel(f"{metric}")
         plt.title(f"{self.basename}: {metric} vs Date")
         plt.savefig(save_path)
+        mlflow.log_artifact(save_path)
         plt.close()
         
     def plot_all_metrics(self):
-        for key in self.dataframe.columns():
+        for key in self.dataframe.columns:
             self.plot_metric(key)
 
 
