@@ -146,7 +146,7 @@ if __name__ == "__main__":
     train_params = {
         "epochs": 500,
         "batch_size": 2,
-        "lr": 4e-4, #7*4e-4
+        "lr": 4e-4, #sqrt(batch_size)*4e-4
         "model_path": None,
         "training_dir": "/mnt/c/Users/david.chaparro/Documents/data/RME04TestingSet/train",
         "validation_dir": "/mnt/c/Users/david.chaparro/Documents/data/RME04TestingSet/val",
