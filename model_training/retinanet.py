@@ -11,7 +11,7 @@ from pycocotools.coco import COCO
 import json
 import mlflow
 from tqdm import tqdm
-from evaluation.evaluation_metrics import centroid_accuracy, calculate_bbox_metrics
+from evaluation.evaluation_metrics import centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference
 from evaluation.plot_predictions import plot_prediction_bbox, plot_prediction_bbox_annotation
 
 
@@ -66,18 +66,12 @@ def evaluate(model, dataset_directory:str, epoch:int, dataloader:DataLoader, coc
                         "bbox": [x1, y1, x2 - x1, y2 - y1],  # COCO format
                         "score": float(score),
                     })
-            if len(outputs) == 0:
-                # Choose an image from your dataset to attach the dummy detection
-                predictions.append({
-                    "image_id": dummyID,
-                    "category_id": 1,  # just pick a valid category
-                    "bbox": [0, 0, 1, 1],  # tiny box
-                    "score": 1e-8  # very low confidence
-                })
     centroid_metrics = centroid_accuracy(total_predictions, total_targets)
     average_precisionts = calculate_bbox_metrics(total_predictions, total_targets)
+    centroid_distance_accuracy = calculate_centroid_difference(total_predictions, total_targets)
     mlflow.log_metrics(centroid_metrics, epoch)
     mlflow.log_metrics(average_precisionts, epoch)
+    mlflow.log_metrics(centroid_distance_accuracy, epoch)
 
 
 
@@ -151,11 +145,12 @@ if __name__ == "__main__":
 
     train_params = {
         "epochs": 500,
-        "batch_size": 48,
-        "lr": 7*4e-4,
-        # "model_path": "/home/davidchaparro/Datasets/MultiChannelRME04Sats_Train/models/retinanet_weights_E42.pt",
-        "training_dir": "/home/davidchaparro/Datasets/MultiChannelRME04Sats_Train/train",
-        "validation_dir": "/home/davidchaparro/Datasets/MultiChannelRME04Sats_Train/val",
+        "batch_size": 2,
+        "lr": 4e-4, #7*4e-4
+        "model_path": None,
+        "training_dir": "/mnt/c/Users/david.chaparro/Documents/data/RME04TestingSet/train",
+        "validation_dir": "/mnt/c/Users/david.chaparro/Documents/data/RME04TestingSet/val",
+        "gpu": 0
     }
 
     # Custom transforms (RetinaNet expects images and targets)
@@ -190,7 +185,7 @@ if __name__ == "__main__":
 
 
     # Optimizer
-    device = torch.device("cuda:5" if torch.cuda.is_available() else "cpu")
+    device = torch.device(f"cuda:{train_params["gpu"]}" if torch.cuda.is_available() else "cpu")
     model.to(device)
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.SGD(params, lr=train_params['lr'], momentum=0.9, weight_decay=0.0005)
@@ -208,55 +203,7 @@ if __name__ == "__main__":
             losses = train_one_epoch(model, optimizer, training_loader, device, epoch)
             mlflow.log_metrics(losses, epoch) 
             predictions_path = evaluate(model, validation_dir, epoch, validation_loader, coco_gt)
-
-            try:
-                coco_dt = coco_gt.loadRes(predictions_path)
-                coco_eval = COCOeval(coco_gt, coco_dt, iouType='bbox')  # or 'segm' for instance segmentation
-            except IndexError:
-                # Load predictions from file
-                with open(predictions_path, 'r') as f:
-                    predictions = json.load(f)
-
-                # If predictions are empty, inject a harmless dummy prediction
-                if len(predictions) == 0:
-                    print("Predictions file is empty — injecting dummy prediction to avoid COCOeval crash.")
-                    dummy_image_id = coco_gt.getImgIds()[0]  # Pick any valid image_id
-                    predictions = [{
-                        "image_id": dummy_image_id,
-                        "category_id": coco_gt.getCatIds()[0],  # Pick a valid category_id
-                        "bbox": [0, 0, 1, 1],  # Tiny box
-                        "score": 1e-8  # Extremely low confidence
-                    }]
-
-                # Save the updated predictions back to file if needed
-                with open(predictions_path, 'w') as f:
-                    json.dump(predictions, f)
-
-                coco_dt = coco_gt.loadRes(predictions_path)
-                coco_eval = COCOeval(coco_gt, coco_dt, iouType='bbox')
-
-            coco_eval.evaluate()
-            coco_eval.accumulate()
-            coco_eval.summarize()
-
-            # Extract metrics into dictionary
-            metric_names = [
-                "AP_IoU 0.50:0.95",
-                "AP0.50",
-                "AP0.75",
-                "AP_small",
-                "AP_medium",
-                "AP_large",
-                "AR_IoU 0.50:0.95",
-                "AR_IoU 0.50:0.95",
-                "AR_IoU 0.50:0.95",
-                "AR_small",
-                "AR_medium",
-                "AR_large",
-            ]
-            
             torch.save(model.state_dict(), os.path.join(models_dir,f"retinanet_weights_E{epoch}.pt"))
-            metrics_dict = {name: float(value) for name, value in zip(metric_names, coco_eval.stats)}
             # mlflow.log_metrics(metrics_dict, epoch) 
         mlflow.end_run()
 

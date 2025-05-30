@@ -9,7 +9,7 @@ def _find_centroid(tensor: Tensor) -> Tensor:
         tensor (tensor): tensor bounding box [X1,Y1,X2,Y2], shape [N,4]
 
     Returns:
-        centroids (tensor): List of files present in the train test split
+        centroids (tensor): Torch tensor of centroids
     """
     x = (tensor[:,2]+tensor[:,0])/2
     y = (tensor[:,3]+tensor[:,1])/2
@@ -68,6 +68,23 @@ def _calculate_IOU(predictions: Tensor, targets: Tensor):
     iou= intersect_area/(union_area + 1e-8)
 
     return iou
+
+def _calculate_nearest_box_loss(prediction_centroids:Tensor, target_centroids:Tensor) -> float:
+
+    if prediction_centroids.numel() == 0:
+        return 256
+    if target_centroids.numel() == 0 and prediction_centroids.numel() > 0:
+        return 256
+    if target_centroids.numel() == 0 and prediction_centroids.numel() == 0:
+        return 0
+
+
+    differences = prediction_centroids[:,None,:] - target_centroids[None, :,:]
+    distances = torch.norm(differences, dim=2)
+    nearest_indicies = torch.argmin(distances, dim=1)
+
+    nearest_distances = distances[torch.arange(len(prediction_centroids)), nearest_indicies]
+    return torch.sum(nearest_distances).item()
 
 def calculate_ap_at_threshold(iou_matrix, iou_threshold):
     """
@@ -192,7 +209,6 @@ def compute_ar_from_iou(iou_matrix, pred_scores, iou_threshold=0.5):
     recall = TP / (N_gt + 1e-8)
     return recall
 
-
 def calculate_bbox_metrics(preds: list,targets: list) -> dict:
     """
     Calculate bounding box metrics such as average precision, average recall and IOU score
@@ -242,11 +258,7 @@ def calculate_bbox_metrics(preds: list,targets: list) -> dict:
     ar50 = compute_ar_from_iou(global_iou, global_scores, iou_threshold=0.50)
     ar75 = compute_ar_from_iou(global_iou, global_scores, iou_threshold=0.75)
 
-
-
-
     return {"AP50": ap50, "AP75": ap75, "AR50":ar50, "AR75":ar75 }
-
 
 def centroid_accuracy(preds:list, targets:list) -> dict:
     """
@@ -273,5 +285,23 @@ def centroid_accuracy(preds:list, targets:list) -> dict:
     f1 = precision*recall/(precision+recall+1e-8)
     return {"Anchor_F1": f1, "Anchor_Precision": precision, "Anchor_Recall ": recall}
 
+def calculate_centroid_difference(preds:list, targets:list) -> dict:
+    num_boxes=0
+    total_distance=0
+    avg_distance=0
+    target_box_surplus=0
+    for prediction, target in zip(preds, targets):
+        predicted_centroids = _find_centroid(prediction["boxes"])
+        target_centroids = _find_centroid(target["boxes"])
 
+        centroid_distances = _calculate_nearest_box_loss(predicted_centroids, target_centroids)
+        num_pred_boxes = len(predicted_centroids)
+        num_target_boxes = len(target_centroids)
+
+        num_boxes += num_pred_boxes
+        total_distance += centroid_distances
+        target_box_surplus += num_pred_boxes-num_target_boxes
+        avg_distance += centroid_distances/max(1, num_pred_boxes)
+
+    return {"Num_Predicted_Boxes": num_boxes/len(targets), "Total_distance_from_centroid": total_distance/len(targets), "Avg_centroid_distance": avg_distance/len(targets), "Prediction_box_surplus": target_box_surplus/len(targets)}
 
