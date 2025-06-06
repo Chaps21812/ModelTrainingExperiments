@@ -100,6 +100,18 @@ def perform_timewise_benchmark(datasets:list, model_path:str, output_directory:s
 
 
 if __name__ == "__main__":
+    LMNT02_datasets = ["/home/davidchaparro/Datasets/MultiChannelLMNT02-2024-08-05/", 
+                        "/home/davidchaparro/Datasets/MultiChannelLMNT02-2024-08-21/", 
+                        "/home/davidchaparro/Datasets/MultiChannelLMNT02-2024-09-06/", 
+                        "/home/davidchaparro/Datasets/MultiChannelLMNT02-2024-09-14/", 
+                        "/home/davidchaparro/Datasets/MultiChannelLMNT02-2024-10-08/", 
+                        "/home/davidchaparro/Datasets/MultiChannelLMNT02-2024-10-17/", 
+                        "/home/davidchaparro/Datasets/MultiChannelLMNT02-2024-10-31/", 
+                        "/home/davidchaparro/Datasets/MultiChannelLMNT02-2024-11-15/", 
+                        "/home/davidchaparro/Datasets/MultiChannelLMNT02-2024-11-27/", 
+                        "/home/davidchaparro/Datasets/MultiChannelLMNT02-2024-12-20/", 
+                        "/home/davidchaparro/Datasets/MultiChannelLMNT02-2024-12-31/", 
+                        "/home/davidchaparro/Datasets/MultiChannelLMNT02-2025-01-08/"]
     datasets=["/home/davidchaparro/Datasets/MultiChannelRME04Sats-2024-05-30/",
               "/home/davidchaparro/Datasets/MultiChannelRME04Sats-2024-06-15/",
               "/home/davidchaparro/Datasets/MultiChannelRME04Sats-2024-06-25/",
@@ -109,8 +121,9 @@ if __name__ == "__main__":
               "/home/davidchaparro/Datasets/MultiChannelRME04Sats-2024-08-28/",
               ]
     model = "/home/davidchaparro/Datasets/MultiChannelRME04Sats_Train/models/BestModelE42.pt"
-    title = "MultiChannelRME04_experiment"
+    title = "MultiChannelRME04_to_LMNT02_experiment"
     output_dir = f"/home/davidchaparro/Datasets/{title}"
 
     
-    perform_timewise_benchmark(datasets,model,output_dir,title, device_no=6)
+    perform_timewise_benchmark(LMNT02_datasets,model,output_dir,title, device_no=6)
+

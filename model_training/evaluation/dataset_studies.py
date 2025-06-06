@@ -69,7 +69,7 @@ class Dataset_study():
         save_path = os.path.join(self.figure_folder, f"{metric}-{self.basename}.png")
         plt.clf() 
         plt.close('all')
-        plt.figure(figsize=(10, 12)) 
+        plt.figure(figsize=(8, 9)) 
         plt.plot(self.dataframe["date"], self.dataframe[metric], color="teal")
         plt.xticks(self.dataframe["date"].tolist(), rotation=45)
         plt.xlabel("Dataset Date")

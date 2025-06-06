@@ -47,8 +47,8 @@ def evaluate(model, dataset_directory:str, epoch:int, dataloader:DataLoader, coc
 
 
         if epoch%10 == 0 and plot:
-            plot_prediction_bbox(images, outputs, targets, dataset_directory, epoch)
-            plot_prediction_bbox_annotation(images, outputs, targets, dataset_directory, epoch)
+            # plot_prediction_bbox(images, outputs, targets, dataset_directory, epoch)
+            # plot_prediction_bbox_annotation(images, outputs, targets, dataset_directory, epoch)
             plot=False
 
         for i, output in enumerate(outputs):
