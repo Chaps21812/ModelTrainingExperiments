@@ -96,9 +96,4 @@ def zscale(data:np.ndarray) -> np.ndarray:
 
 
 if __name__=="__main__":
-        from coco_tools import silt_to_coco, satsim_to_coco, merge_coco
-        from preprocess_functions import channel_mixture, adaptiveIQR, zscale
-
-        Process_pathE = "/mnt/c/Users/david.chaparro/Documents/Repos/Dataset-Statistics/data/PDS-RME04-2024-05-07"
-        final_destination_path = "/mnt/c/Users/david.chaparro/Documents/data/ZScaledRME03AllStar"
-        silt_to_coco(Process_pathE, include_sats=True, include_stars=False, convert_png=True, process_func=channel_mixture, notes="Channel Mixture of Adaptive IQR, raw, and zscaled. ")
+    print("bruh")
