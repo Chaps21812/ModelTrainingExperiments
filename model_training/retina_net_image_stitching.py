@@ -7,8 +7,8 @@ from torch.utils.data import DataLoader
 import os
 import mlflow
 from evaluation.evaluation_metrics import centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference
-from training_frameworks.evaluate_one_epoch import evaluate
-from training_frameworks.train_one_epoch import train_one_epoch
+from training_frameworks.evaluate_one_epoch import evaluate_stitching
+from training_frameworks.train_one_epoch import train_image_stitching
 
 
 if __name__ == "__main__":
@@ -67,9 +67,9 @@ if __name__ == "__main__":
         mlflow.log_params(train_params)
         model.train()
         for epoch in range(train_params["epochs"]):
-            losses = train_one_epoch(model, optimizer, training_loader, device, epoch)
+            losses = train_image_stitching(model, optimizer, training_loader, device, epoch)
             mlflow.log_metrics(losses, epoch) 
-            results = evaluate(model, validation_dir, epoch, validation_loader, train_params["evaluation_metrics"], device)
+            results = evaluate_stitching(model, validation_dir, epoch, validation_loader, train_params["evaluation_metrics"], device)
             mlflow.log_metrics(results, epoch) 
             torch.save(model.state_dict(), os.path.join(models_dir,f"retinanet_weights_E{epoch}.pt"))
         mlflow.end_run()
