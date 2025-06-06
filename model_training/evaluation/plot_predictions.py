@@ -5,6 +5,7 @@ import numpy as np
 import mlflow
 from preprocessing_techniques.preprocessing import zscale
 import torch
+from IPython.display import clear_output
 
 #Plotting predictions and calculating precision scores
 def plot_prediction_bbox(images, predictions, targets, output_dir, epoch):
@@ -103,4 +104,55 @@ def plot_prediction_bbox_annotation(images, predictions, targets, output_dir, ep
             plt.close()
             torch.cuda.empty_cache()
             mlflow.log_artifact(image_path)
+    plt.close()
+
+
+# def plot_image_stitch_bbox(images, predictions, targets, output_dir, epoch, padding = 30, show=False):
+def plot_image_stitch_bbox(images, targets, padding = 20, show=False, alpha=.4):
+    # for index, (image, prediction_results, target_results) in enumerate(zip(images, predictions, targets)):
+    for index, (image, target_results) in enumerate(zip(images, targets)):
+        target_boxes = target_results["boxes"].detach().cpu()
+        id = target_results["image_id"].detach().cpu()
+        x_index = target_results["lower_x_bound"]
+        y_index = target_results["lower_y_bound"]
+        # prediction_boxes = prediction_results["boxes"].detach().cpu()
+        # prediction_scores = prediction_results["scores"].detach().cpu()
+
+        img_hwc = np.transpose(image.detach().cpu(), (1, 2, 0))
+        for line_index,line_row in enumerate(target_boxes):
+            plt.clf() 
+            plt.close('all')
+            fig, ax = plt.subplots(1,2, figsize=(10,4))
+            ax[0].set_title(f"{id} Full cropped image X:{x_index} Y:{y_index} TGT: {target_boxes.shape[0]}")
+            ax[0].imshow(img_hwc)
+            ax[1].set_title(f"{id} Target {line_index+1}")
+            ax[1].imshow(img_hwc)
+
+            x1 = line_row[0].item()
+            y1 = line_row[1].item()
+            x2 = line_row[2].item()
+            y2 = line_row[3].item()
+            x = (x2+x1)/2
+            y = (y2+y1)/2
+            w = (x2-x1)
+            h = (y2-y1)
+            square = patches.Rectangle((x1, y1), w, h, linewidth=3, edgecolor='red', facecolor='none', alpha=alpha)
+            ax[0].add_patch(square)
+            ax[0].plot(x, y, 'o', alpha=alpha, color="red")
+            square = patches.Rectangle((x1, y1), w, h, linewidth=3, edgecolor='red', facecolor='none', alpha=alpha)
+            ax[1].add_patch(square)
+            ax[1].plot(x, y, 'o', alpha=alpha, color="red")
+            ax[1].set_xlim(x1-padding, x2+padding)
+            ax[1].set_ylim(y1-padding, y2+padding)
+            if show:
+                plt.show()
+                input("Press enter to continue")
+                plt.clf()   # Clears the current figure
+                plt.cla()   # Clears the current axes (optional)
+                plt.close()
+                clear_output(wait=True)
+
+
+            plt.close()
+            torch.cuda.empty_cache()
     plt.close()
