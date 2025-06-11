@@ -29,7 +29,7 @@ def evaluate(model, dataset_directory:str, epoch:int, dataloader:DataLoader, eva
     for metric in evaluation_metrics:
         results = metric(total_predictions, total_targets)
         metrics.update(results)
-    return results
+    return metrics
 
 def evaluate_stitching(model, dataset_directory:str, epoch:int, dataloader:DataLoader, evaluation_metrics:list, device:str, plot:bool=False):
     total_targets= []
@@ -56,5 +56,5 @@ def evaluate_stitching(model, dataset_directory:str, epoch:int, dataloader:DataL
     for metric in evaluation_metrics:
         results = metric(total_predictions, total_targets)
         metrics.update(results)
-    return results
+    return metrics
         

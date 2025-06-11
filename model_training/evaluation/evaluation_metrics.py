@@ -1,4 +1,5 @@
 from torch.types import Tensor
+import numpy as np
 import torch
 
 def _find_centroid(tensor: Tensor) -> Tensor:
@@ -71,7 +72,7 @@ def _calculate_IOU(predictions: Tensor, targets: Tensor):
 
 def _calculate_nearest_box_loss(prediction_centroids:Tensor, target_centroids:Tensor) -> float:
 
-    if prediction_centroids.numel() == 0:
+    if target_centroids.numel() > 0 and prediction_centroids.numel() == 0:
         return 256
     if target_centroids.numel() == 0 and prediction_centroids.numel() > 0:
         return 256
@@ -85,6 +86,7 @@ def _calculate_nearest_box_loss(prediction_centroids:Tensor, target_centroids:Te
 
     nearest_distances = distances[torch.arange(len(prediction_centroids)), nearest_indicies]
     return torch.sum(nearest_distances).item()
+
 
 def calculate_ap_at_threshold(iou_matrix, iou_threshold):
     """
@@ -286,10 +288,11 @@ def centroid_accuracy(preds:list, targets:list) -> dict:
     return {"Anchor_F1": f1, "Anchor_Precision": precision, "Anchor_Recall ": recall}
 
 def calculate_centroid_difference(preds:list, targets:list) -> dict:
-    num_boxes=0
-    total_distance=0
-    avg_distance=0
-    target_box_surplus=0
+    num_boxes = []
+    total_distance = []
+    avg_distance = []
+    target_box_surplus = []
+
     for prediction, target in zip(preds, targets):
         predicted_centroids = _find_centroid(prediction["boxes"])
         target_centroids = _find_centroid(target["boxes"])
@@ -298,10 +301,33 @@ def calculate_centroid_difference(preds:list, targets:list) -> dict:
         num_pred_boxes = len(predicted_centroids)
         num_target_boxes = len(target_centroids)
 
-        num_boxes += num_pred_boxes
-        total_distance += centroid_distances
-        target_box_surplus += num_pred_boxes-num_target_boxes
-        avg_distance += centroid_distances/max(1, num_pred_boxes)
+        num_boxes.append(num_pred_boxes)
+        total_distance.append(centroid_distances)
+        target_box_surplus.append(num_pred_boxes-num_target_boxes)
+        avg_distance.append(centroid_distances/max(1, num_pred_boxes))    
+    
+    return {"Median_predicted_boxes": np.mean(num_boxes), "Median_total_distance": np.median(total_distance), "Median_centroid_distance": np.median(target_box_surplus), "Median_box_surplus": np.median(avg_distance),  "Mean_predicted_boxes": np.mean(num_boxes), "Mean_total_distance": np.mean(total_distance), "Mean_centroid_distance": np.mean(target_box_surplus), "Mean_box_surplus": np.mean(avg_distance)}
 
-    return {"Num_Predicted_Boxes": num_boxes/len(targets), "Total_distance_from_centroid": total_distance/len(targets), "Avg_centroid_distance": avg_distance/len(targets), "Prediction_box_surplus": target_box_surplus/len(targets)}
+def calculate_centroid_difference_with_confidence(preds:list, targets:list, confidence_threshold=.90) -> dict:
+    num_boxes = []
+    total_distance = []
+    avg_distance = []
+    target_box_surplus = []
+
+    for prediction, target in zip(preds, targets):
+        predicted_centroids = _find_centroid(prediction["boxes"])
+        target_centroids = _find_centroid(target["boxes"])
+
+        boxes_above_threshold = torch.nonzero(prediction["scores"] > confidence_threshold).squeeze()
+
+        centroid_distances = _calculate_nearest_box_loss(predicted_centroids[boxes_above_threshold,:], target_centroids)
+        num_pred_boxes = len(predicted_centroids)
+        num_target_boxes = len(target_centroids)
+
+        num_boxes.append(num_pred_boxes)
+        total_distance.append(centroid_distances)
+        target_box_surplus.append(num_pred_boxes-num_target_boxes)
+        avg_distance.append(centroid_distances/max(1, num_pred_boxes))    
+    
+    return {"Median_predicted_boxes_90c": np.mean(num_boxes), "Median_total_distance_90c": np.median(total_distance), "Median_centroid_distance_90c": np.median(target_box_surplus), "Median_box_surplus_90c": np.median(avg_distance),  "Mean_predicted_boxes_90c": np.mean(num_boxes), "Mean_total_distance_90c": np.mean(total_distance), "Mean_centroid_distance_90c": np.mean(target_box_surplus), "Mean_box_surplus_90c": np.mean(avg_distance)}
 
