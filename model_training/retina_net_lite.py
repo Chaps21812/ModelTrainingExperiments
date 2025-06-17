@@ -15,31 +15,31 @@ if __name__ == "__main__":
 
     train_params = {
         "epochs": 250,
-        "batch_size": 48,
+        "batch_size": 42,
         "lr": 2e-4, #sqrt(batch_size)*4e-4
         "model_path": None,
         "training_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat_Training_Channel_Mixture_C/train",
         "validation_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat_Training_Channel_Mixture_C/val",
-        "gpu": 0,
+        "gpu": 3,
         "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_with_confidence], 
         "momentum": 0.9,
         "weight_decay": 0.0005, 
         "experiment_name": "RME04_MixtureC"
     }
 
-    train_params = {
-        "epochs": 250,
-        "batch_size": 48,
-        "lr": 2e-4, #sqrt(batch_size)*4e-4
-        "model_path": None,
-        "training_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat-2024-06-05_Channel_Mixture_C",
-        "validation_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat-2024-06-05_Channel_Mixture_C",
-        "gpu": 0,
-        "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_with_confidence], 
-        "momentum": 0.9,
-        "weight_decay": 0.0005, 
-        "experiment_name": "TEsting"
-    }
+    # train_params = {
+    #     "epochs": 250,
+    #     "batch_size": 48,
+    #     "lr": 2e-4, #sqrt(batch_size)*4e-4
+    #     "model_path": None,
+    #     "training_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat-2024-06-05_Channel_Mixture_C",
+    #     "validation_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat-2024-06-05_Channel_Mixture_C",
+    #     "gpu": 7,
+    #     "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_with_confidence], 
+    #     "momentum": 0.9,
+    #     "weight_decay": 0.0005, 
+    #     "experiment_name": "TEsting"
+    # }
 
     
 

@@ -1,10 +1,12 @@
 import torch
+import gc
 
 #Images is a list of tensors
 #Targets is a list of dictionaries, with image_id, boxes: tensor[labels], and labels: tensor[N_boxes, 4]
 def partition_images(images:list, targets:list=None, device="cuda:0", sizeX:int=512, sizeY:int=512) -> tuple[list,list]:
     cropped_images = []
     cropped_targets = []
+    image_nnid = 0
     for j, image in enumerate(images):
         x_res = image.shape[2] #Watch for X,Y Switch here
         y_res = image.shape[1] #Watch for X,Y Switch here
@@ -24,7 +26,7 @@ def partition_images(images:list, targets:list=None, device="cuda:0", sizeX:int=
                 lower_y_bound = max(0, int(y_center-sizeY/2))
                 upper_y_bound = min(y_res, int(y_center+sizeY/2))
                 
-                cropped_image = image[:,lower_y_bound:upper_y_bound, lower_x_bound:upper_x_bound] #Watch for X,Y Switch here
+                cropped_image = image[:,lower_y_bound:upper_y_bound, lower_x_bound:upper_x_bound].clone() #Watch for X,Y Switch here
                 if cropped_image.shape[1] ==0 or cropped_image.shape[2]==0:
                     continue
                 standardized_image = torch.zeros([image.shape[0], sizeX, sizeY])
@@ -39,9 +41,10 @@ def partition_images(images:list, targets:list=None, device="cuda:0", sizeX:int=
                 
                 if targets is not None:
                     target = targets[j]
-                    partition_dict["image_id"] = target["image_id"]
+                    # partition_dict["image_id"] = target["image_id"]
+                    partition_dict["image_id"] = image_nnid
                     targets_tensors = torch.empty((0,4)).to(device)
-                    labels_tensor = torch.empty((0,1)).to(device)
+                    labels_tensor = torch.empty((0,1)).to(device).int()
                     scores_tensor = torch.empty((0,1)).to(device)
                     for i, row in enumerate(target["boxes"]):
                         x_min = row[0]
@@ -74,15 +77,24 @@ def partition_images(images:list, targets:list=None, device="cuda:0", sizeX:int=
                             bounded_annotation = bounded_annotation.reshape((1,4)).to(device)
                             category_label = torch.tensor(int(target["labels"][i])).to(device)
                             score = torch.tensor([1]).to(device)
-                            scores_tensor = torch.vstack([scores_tensor, score])
-                            targets_tensors = torch.vstack([targets_tensors, bounded_annotation])
-                            labels_tensor = torch.vstack([labels_tensor, category_label])
+                            scores_tensor = torch.vstack([scores_tensor, score.float()])
+                            targets_tensors = torch.vstack([targets_tensors, bounded_annotation.float()])
+                            labels_tensor = torch.vstack([labels_tensor, category_label.int()])
                     partition_dict["boxes"] = targets_tensors.to(device)
                     partition_dict["labels"] = labels_tensor.to(device)
                     partition_dict["scores"] = scores_tensor.to(device)
 
                 cropped_targets.append(partition_dict)
-                cropped_images.append(standardized_image)
+                cropped_images.append(standardized_image.to(device))
+                image_nnid +=1
+                cropped_image = cropped_image.cpu()
+                del cropped_image
+                torch.cuda.empty_cache() 
+        image = image.cpu()
+        del image
+        torch.cuda.empty_cache() 
+
+
     return cropped_images, cropped_targets
 
 def recombine_annotations(empty_image_info, predictions, device="cuda:0"):

@@ -308,7 +308,7 @@ def calculate_centroid_difference(preds:list, targets:list) -> dict:
     
     return {"Median_predicted_boxes": np.mean(num_boxes), "Median_total_distance": np.median(total_distance), "Median_centroid_distance": np.median(target_box_surplus), "Median_box_surplus": np.median(avg_distance),  "Mean_predicted_boxes": np.mean(num_boxes), "Mean_total_distance": np.mean(total_distance), "Mean_centroid_distance": np.mean(target_box_surplus), "Mean_box_surplus": np.mean(avg_distance)}
 
-def calculate_centroid_difference_with_confidence(preds:list, targets:list, confidence_threshold=.90) -> dict:
+def calculate_centroid_difference_with_confidence(preds:list, targets:list, confidence_threshold=.10) -> dict:
     num_boxes = []
     total_distance = []
     avg_distance = []
@@ -319,8 +319,19 @@ def calculate_centroid_difference_with_confidence(preds:list, targets:list, conf
         target_centroids = _find_centroid(target["boxes"])
 
         boxes_above_threshold = torch.nonzero(prediction["scores"] > confidence_threshold).squeeze()
+        predicted_centroids = predicted_centroids[boxes_above_threshold,:]
+        # if len(predicted_centroids) > 1:
+        #     print("More than 1")
+        if predicted_centroids.ndim == 1:
+            print("Bug causing centroids to lose a dimension")
+            print(predicted_centroids.shape)
+            predicted_centroids = predicted_centroids.unsqueeze(0)
+            print(predicted_centroids.shape)
+        if predicted_centroids.shape[1] != 2:
+            print("Tensor has wrong second dimension")
+            print(predicted_centroids.shape)
 
-        centroid_distances = _calculate_nearest_box_loss(predicted_centroids[boxes_above_threshold,:], target_centroids)
+        centroid_distances = _calculate_nearest_box_loss(predicted_centroids, target_centroids)
         num_pred_boxes = len(predicted_centroids)
         num_target_boxes = len(target_centroids)
 
@@ -329,5 +340,12 @@ def calculate_centroid_difference_with_confidence(preds:list, targets:list, conf
         target_box_surplus.append(num_pred_boxes-num_target_boxes)
         avg_distance.append(centroid_distances/max(1, num_pred_boxes))    
     
+    if len(num_boxes) ==0:
+        num_boxes.append(256)
+        total_distance.append(256)
+        target_box_surplus.append(256)
+        avg_distance.append(256)    
+
+
     return {"Median_predicted_boxes_90c": np.mean(num_boxes), "Median_total_distance_90c": np.median(total_distance), "Median_centroid_distance_90c": np.median(target_box_surplus), "Median_box_surplus_90c": np.median(avg_distance),  "Mean_predicted_boxes_90c": np.mean(num_boxes), "Mean_total_distance_90c": np.mean(total_distance), "Mean_centroid_distance_90c": np.mean(target_box_surplus), "Mean_box_surplus_90c": np.mean(avg_distance)}
 

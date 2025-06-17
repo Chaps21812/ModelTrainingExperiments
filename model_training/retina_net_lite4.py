@@ -3,7 +3,7 @@ import torchvision
 from torchvision.models.detection import retinanet_resnet50_fpn, retinanet_resnet50_fpn_v2
 from torchvision.datasets import CocoDetection
 import torchvision.transforms.v2 as T
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 import os
 import mlflow
 from evaluation.evaluation_metrics import centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_with_confidence
@@ -15,19 +15,18 @@ if __name__ == "__main__":
 
     train_params = {
         "epochs": 250,
-        "batch_size": 48,
+        "batch_size": 24,
         "lr": 2e-4, #sqrt(batch_size)*4e-4
         "model_path": None,
-        "training_dir": "/data/Sentinel_Datasets/Finalized_datasets/LMNT02Sat_Training_Channel_Mixture_C/train",
-        "validation_dir": "/data/Sentinel_Datasets/Finalized_datasets/LMNT02Sat_Training_Channel_Mixture_C/val",
-        "gpu": 2,
+        "training_dir": ["/data/Sentinel_Datasets/Finalized_datasets/LMNT02Sat_Training_Channel_Mixture_C/train","/data/Sentinel_Datasets/Finalized_datasets/LMNT01Sat_Training_Channel_Mixture_C/train","/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat_Training_Channel_Mixture_C/train"
+],
+        "validation_dir": ["/data/Sentinel_Datasets/Finalized_datasets/LMNT02Sat_Training_Channel_Mixture_C/val","/data/Sentinel_Datasets/Finalized_datasets/LMNT01Sat_Training_Channel_Mixture_C/val","/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat_Training_Channel_Mixture_C/val"],
+        "gpu": 6,
         "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_with_confidence], 
         "momentum": 0.9,
         "weight_decay": 0.0005, 
-        "experiment_name": "LMNT02_MixtureC"
+        "experiment_name": "All_Telescope_training"
     }
-
-    
 
     # Custom transforms (RetinaNet expects images and targets)
     transform = T.Compose([
@@ -35,15 +34,24 @@ if __name__ == "__main__":
     ])
 
     # Dataset paths
-    training_dir = train_params["training_dir"]
-    validation_dir = train_params["validation_dir"]
+    training_dir = train_params["training_dir"][0]
+    validation_dir = train_params["validation_dir"][0]
     base_dir = os.path.dirname(training_dir)
     models_dir = os.path.join(base_dir, "models", train_params["experiment_name"])
     os.makedirs(models_dir, exist_ok=True)
 
     # Load COCO-style dataset
-    training_set = CocoDetection(root=training_dir, annFile=os.path.join(training_dir, "annotations", "annotations.json"), transforms=transform)
-    validation_set = CocoDetection(root=validation_dir, annFile=os.path.join(validation_dir, "annotations", "annotations.json"), transforms=transform)
+    training_sets = []
+    validation_sets = []
+    for training_set,validation_set in zip(train_params["training_dir"], train_params["validation_dir"]):
+        temp_training = CocoDetection(root=training_dir, annFile=os.path.join(training_dir, "annotations", "annotations.json"), transforms=transform)
+        temp_validation = CocoDetection(root=validation_dir, annFile=os.path.join(validation_dir, "annotations", "annotations.json"), transforms=transform)
+        training_sets.append(temp_training)
+        validation_sets.append(temp_validation)
+
+    training_set = ConcatDataset(training_sets)
+    validation_set = ConcatDataset(validation_sets)
+
     training_loader = DataLoader(training_set, batch_size=train_params["batch_size"], shuffle=True, collate_fn=lambda x: (zip(*x)))
     validation_loader = DataLoader(validation_set, batch_size=train_params["batch_size"], shuffle=True, collate_fn=lambda x: (zip(*x)))
 

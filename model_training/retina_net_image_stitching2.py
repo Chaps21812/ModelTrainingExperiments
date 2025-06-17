@@ -20,7 +20,7 @@ if __name__ == "__main__":
         "model_path": None,
         "training_dir": "/data/Sentinel_Datasets/Finalized_datasets/LMNT01Sat_Training_Channel_Mixture_C/train",
         "validation_dir": "/data/Sentinel_Datasets/Finalized_datasets/LMNT01Sat_Training_Channel_Mixture_C/val",
-        "gpu": 5,
+        "gpu": 4,
         "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_with_confidence], 
         "momentum": 0.9,
         "weight_decay": 0.0005, 
