@@ -15,6 +15,8 @@ def _find_centroid(tensor: Tensor) -> Tensor:
     x = (tensor[:,2]+tensor[:,0])/2
     y = (tensor[:,3]+tensor[:,1])/2
     centroids = torch.stack((x,y), dim=1)
+    if centroids.ndim == 3:
+        print("bruh")
     return centroids
 
 def _calculate_true_positives(centroids:Tensor, targets:Tensor) -> tuple[Tensor, Tensor]:
@@ -87,7 +89,6 @@ def _calculate_nearest_box_loss(prediction_centroids:Tensor, target_centroids:Te
     nearest_distances = distances[torch.arange(len(prediction_centroids)), nearest_indicies]
     return torch.sum(nearest_distances).item()
 
-
 def calculate_ap_at_threshold(iou_matrix, iou_threshold):
     """
     Calculates precision and recall at a given IoU threshold, then returns AP.
@@ -137,12 +138,15 @@ def compute_ap_from_iou(iou_matrix, pred_scores, iou_threshold=0.5):
     Returns:
         float: AP@0.5
     """
+    if iou_matrix.ndim==3:
+        print(iou_matrix.shape)
     N, M = iou_matrix.shape
     if N == 0:
         return 1.0 if M == 0 else 0.0
 
     # Sort predictions by descending score
     scores, sorted_indices = pred_scores.sort(descending=True)
+    sorted_indices = sorted_indices.squeeze() if sorted_indices.ndim > 1 else sorted_indices
     iou_matrix = iou_matrix[sorted_indices]
 
     matched_gt = torch.zeros(M, dtype=torch.bool)
@@ -155,10 +159,18 @@ def compute_ap_from_iou(iou_matrix, pred_scores, iou_threshold=0.5):
             fps.append(1.0)
             continue
 
+        if iou_matrix.ndim==3:
+            print(iou_matrix.shape)
         ious = iou_matrix[i]
         max_iou, gt_idx = ious.max(0)
+        if iou_matrix.ndim==3:
+            print(iou_matrix.shape)
 
-        if max_iou >= iou_threshold and not matched_gt[gt_idx]:
+        # max_iou = max_iou[0].item() if max_iou.numel() > 1 else max_iou
+        # matched_target =  matched_gt[gt_idx][0].item() if matched_gt[gt_idx].numel() > 1 else matched_gt[gt_idx]
+        matched_target =  matched_gt[gt_idx]
+
+        if max_iou >= iou_threshold and not matched_target:
             tps.append(1.0)
             fps.append(0.0)
             matched_gt[gt_idx] = True
@@ -191,14 +203,17 @@ def compute_ar_from_iou(iou_matrix, pred_scores, iou_threshold=0.5):
         return 1.0 if N_pred == 0 else 0.0
 
     matched_gt = torch.zeros(N_gt, dtype=torch.bool)
+    matched_gt = matched_gt.squeeze() if matched_gt.ndim > 1 else matched_gt
     TP = 0
 
     # Sort predictions by descending score
     sorted_indices = pred_scores.sort(descending=True).indices
+    # sorted_indices = sorted_indices.squeeze() if sorted_indices.ndim() > 1 else sorted_indices
     iou_matrix = iou_matrix[sorted_indices]
 
     for i in range(N_pred):
         ious = iou_matrix[i]  # IoUs to all GTs for current prediction
+        ious = ious.squeeze() if ious.ndim > 1 else ious
 
         # Mask out already matched GTs
         ious[matched_gt] = -1.0
@@ -308,7 +323,7 @@ def calculate_centroid_difference(preds:list, targets:list) -> dict:
     
     return {"Median_predicted_boxes": np.mean(num_boxes), "Median_total_distance": np.median(total_distance), "Median_centroid_distance": np.median(target_box_surplus), "Median_box_surplus": np.median(avg_distance),  "Mean_predicted_boxes": np.mean(num_boxes), "Mean_total_distance": np.mean(total_distance), "Mean_centroid_distance": np.mean(target_box_surplus), "Mean_box_surplus": np.mean(avg_distance)}
 
-def calculate_centroid_difference_with_confidence(preds:list, targets:list, confidence_threshold=.10) -> dict:
+def calculate_centroid_difference_90_confidence(preds:list, targets:list, confidence_threshold=.90) -> dict:
     num_boxes = []
     total_distance = []
     avg_distance = []
@@ -323,13 +338,13 @@ def calculate_centroid_difference_with_confidence(preds:list, targets:list, conf
         # if len(predicted_centroids) > 1:
         #     print("More than 1")
         if predicted_centroids.ndim == 1:
-            print("Bug causing centroids to lose a dimension")
-            print(predicted_centroids.shape)
+            # print("Bug causing centroids to lose a dimension")
+            # print(predicted_centroids.shape)
             predicted_centroids = predicted_centroids.unsqueeze(0)
-            print(predicted_centroids.shape)
-        if predicted_centroids.shape[1] != 2:
-            print("Tensor has wrong second dimension")
-            print(predicted_centroids.shape)
+            # print(predicted_centroids.shape)
+        # if predicted_centroids.shape[1] != 2:
+        #     print("Tensor has wrong second dimension")
+        #     print(predicted_centroids.shape)
 
         centroid_distances = _calculate_nearest_box_loss(predicted_centroids, target_centroids)
         num_pred_boxes = len(predicted_centroids)
@@ -348,4 +363,47 @@ def calculate_centroid_difference_with_confidence(preds:list, targets:list, conf
 
 
     return {"Median_predicted_boxes_90c": np.mean(num_boxes), "Median_total_distance_90c": np.median(total_distance), "Median_centroid_distance_90c": np.median(target_box_surplus), "Median_box_surplus_90c": np.median(avg_distance),  "Mean_predicted_boxes_90c": np.mean(num_boxes), "Mean_total_distance_90c": np.mean(total_distance), "Mean_centroid_distance_90c": np.mean(target_box_surplus), "Mean_box_surplus_90c": np.mean(avg_distance)}
+
+def calculate_centroid_difference_10_confidence(preds:list, targets:list, confidence_threshold=.10) -> dict:
+    num_boxes = []
+    total_distance = []
+    avg_distance = []
+    target_box_surplus = []
+
+    for prediction, target in zip(preds, targets):
+        predicted_centroids = _find_centroid(prediction["boxes"])
+        target_centroids = _find_centroid(target["boxes"])
+
+        boxes_above_threshold = torch.nonzero(prediction["scores"] > confidence_threshold).squeeze()
+        predicted_centroids = predicted_centroids[boxes_above_threshold,:]
+        # if len(predicted_centroids) > 1:
+        #     print("More than 1")
+        if predicted_centroids.ndim == 1:
+            predicted_centroids = predicted_centroids.unsqueeze(0)
+        if target_centroids.ndim < 3:
+            print("BRuh")
+            # print("Bug causing centroids to lose a dimension")
+            # print(predicted_centroids.shape)
+            # print(predicted_centroids.shape)
+        # if predicted_centroids.shape[1] != 2:
+        #     print("Tensor has wrong second dimension")
+        #     print(predicted_centroids.shape)
+
+        centroid_distances = _calculate_nearest_box_loss(predicted_centroids, target_centroids)
+        num_pred_boxes = len(predicted_centroids)
+        num_target_boxes = len(target_centroids)
+
+        num_boxes.append(num_pred_boxes)
+        total_distance.append(centroid_distances)
+        target_box_surplus.append(num_pred_boxes-num_target_boxes)
+        avg_distance.append(centroid_distances/max(1, num_pred_boxes))    
+    
+    if len(num_boxes) ==0:
+        num_boxes.append(256)
+        total_distance.append(256)
+        target_box_surplus.append(256)
+        avg_distance.append(256)    
+
+
+    return {"Median_predicted_boxes_10c": np.mean(num_boxes), "Median_total_distance_10c": np.median(total_distance), "Median_centroid_distance_10c": np.median(target_box_surplus), "Median_box_surplus_10c": np.median(avg_distance),  "Mean_predicted_boxes_10c": np.mean(num_boxes), "Mean_total_distance_10c": np.mean(total_distance), "Mean_centroid_distance_10c": np.mean(target_box_surplus), "Mean_box_surplus_10c": np.mean(avg_distance)}
 

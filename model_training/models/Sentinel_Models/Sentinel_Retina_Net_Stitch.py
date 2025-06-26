@@ -1,0 +1,2 @@
+from torchvision.models.detection import retinanet_resnet50_fpn, retinanet_resnet50_fpn_v2
+

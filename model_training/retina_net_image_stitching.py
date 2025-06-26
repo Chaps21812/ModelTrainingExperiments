@@ -6,7 +6,7 @@ import torchvision.transforms.v2 as T
 from torch.utils.data import DataLoader
 import os
 import mlflow
-from evaluation.evaluation_metrics import centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_with_confidence
+from evaluation.evaluation_metrics import centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence
 from training_frameworks.evaluate_one_epoch import evaluate_stitching
 from training_frameworks.train_one_epoch import train_image_stitching
 
@@ -14,34 +14,20 @@ from training_frameworks.train_one_epoch import train_image_stitching
 if __name__ == "__main__":
 
     train_params = {
-        "epochs": 250,
-        "batch_size": 48,
-        "lr": 2e-4, #sqrt(batch_size)*4e-4
+        "epochs": 150,
+        "batch_size": 24,
+        "lr": 1e-4, #sqrt(batch_size)*4e-4
         "model_path": None,
-        "training_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat_Training_Channel_Mixture_C/train",
-        "validation_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat_Training_Channel_Mixture_C/val",
-        "gpu": 3,
-        "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_with_confidence], 
+        "training_dir": "/data/Sentinel_Datasets/Finalized_datasets/LMNT01Sat_Training_Channel_Mixture_C/train",
+        "validation_dir": "/data/Sentinel_Datasets/Finalized_datasets/LMNT01Sat_Training_Channel_Mixture_C/val",
+        "gpu": 2,
+        "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence], 
         "momentum": 0.9,
         "weight_decay": 0.0005, 
-        "experiment_name": "RME04_MixtureC_Imagestitching"
+        "experiment_name": "Image_Stitching_LMNT01",
+        "sub_batch_size": 40
     }
-    train_params = {
-        "epochs": 250,
-        "batch_size": 1,
-        "lr": 2e-4, #sqrt(batch_size)*4e-4
-        "model_path": None,
-        "training_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat_Training_Channel_Mixture_C/train",
-        "validation_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat_Training_Channel_Mixture_C/val",
-        "gpu": 3,
-        "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_with_confidence], 
-        "momentum": 0.9,
-        "weight_decay": 0.0005, 
-        "experiment_name": "TEsting"
-    }
-
     
-
     # Custom transforms (RetinaNet expects images and targets)
     transform = T.Compose([
         T.ToTensor(),
@@ -80,9 +66,9 @@ if __name__ == "__main__":
         mlflow.log_params(train_params)
         model.train()
         for epoch in range(train_params["epochs"]):
-            losses = train_image_stitching(model, optimizer, training_loader, device, epoch)
+            losses = train_image_stitching(model, optimizer, training_loader, device, epoch, sub_batch_size=train_params["sub_batch_size"])
             mlflow.log_metrics(losses, epoch) 
-            results = evaluate_stitching(model, validation_dir, epoch, validation_loader, train_params["evaluation_metrics"], device)
+            results = evaluate_stitching(model, validation_dir, epoch, validation_loader, train_params["evaluation_metrics"], device,  sub_batch_size=train_params["sub_batch_size"])
             mlflow.log_metrics(results, epoch) 
             torch.save(model.state_dict(), os.path.join(models_dir,f"retinanet_weights_E{epoch}.pt"))
         mlflow.end_run()

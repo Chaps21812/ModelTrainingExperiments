@@ -4,6 +4,7 @@ import torchvision
 from torchvision.datasets import CocoDetection
 import torchvision.transforms.v2 as T
 from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 import os
 import mlflow
 from tqdm import tqdm
@@ -37,7 +38,7 @@ def evaluate_over_time(model, dataset_directory:str, epoch:int, dataloader:DataL
         metrics.update(results)
     return metrics
 
-def perform_timewise_benchmark(datasets:list, model_path:str, output_directory:str, experiment_title, evaluation_metrics, device_no=5):
+def perform_cumulative_evaluation(datasets:list, model_path:str, output_directory:str, experiment_title, evaluation_metrics, device_no=5):
     database = Dataset_study(output_directory, datasets, experiment_title)
     # Custom transforms (RetinaNet expects images and targets)
     device = torch.device(f"cuda:{device_no}" if torch.cuda.is_available() else "cpu")
@@ -52,6 +53,15 @@ def perform_timewise_benchmark(datasets:list, model_path:str, output_directory:s
     print(f"Loading Model: {model_path}")
     model.to(device)
 
+    # Load COCO-style dataset
+    validation_sets = []
+    for validation_dir in datasets:
+        temp_validation = CocoDetection(root=validation_dir, annFile=os.path.join(validation_dir, "annotations", "annotations.json"), transforms=transform)
+        validation_sets.append(temp_validation)
+
+    validation_set = ConcatDataset(validation_sets)
+    validation_loader = DataLoader(validation_set, batch_size=32, shuffle=True, collate_fn=lambda x: (zip(*x)))
+
     mlflow.set_tracking_uri("http://localhost:5000")
     mlflow.set_experiment(experiment_title)
     mlflow.log_param("Model", model_path)
@@ -60,8 +70,6 @@ def perform_timewise_benchmark(datasets:list, model_path:str, output_directory:s
     with mlflow.start_run():
         for index, path in tqdm(enumerate(database)):
             # Load COCO-style dataset
-            validation_set = CocoDetection(root=path, annFile=os.path.join(path, "annotations", "annotations.json"), transforms=transform)
-            validation_loader = DataLoader(validation_set, batch_size=32, shuffle=True, collate_fn=lambda x: (zip(*x)))
             results = evaluate_over_time(model, path, index,validation_loader, evaluation_metrics, device)
             mlflow.log_metrics(results, index)
             results["date"] = database.path_to_date[path]
@@ -83,9 +91,9 @@ if __name__ == "__main__":
     LMNT01model = "/data/Sentinel_Datasets/Best_models/LMNT01_Base_model.pt"
     LMNT02model = "/data/Sentinel_Datasets/Best_models/LMNT02_Base_model.pt"
     RME04model = "/data/Sentinel_Datasets/Best_models/RME04_Base_model.pt"
-    title = "Performance_over_time_LMNT01_on_LMNT02_data"
+    title = "Cumulative_RME04_on_RME04_data"
     output_dir = os.path.join("/data/Sentinel_Datasets/Experiments", title)
     metrics = [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence]
 
-    perform_timewise_benchmark(LMNT02_Datasets, LMNT01model, output_dir, title, metrics, device_no=3)
+    perform_cumulative_evaluation(RME04_Datasets, RME04model, output_dir, title, metrics, device_no=5)
 

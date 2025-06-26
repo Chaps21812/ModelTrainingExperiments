@@ -6,40 +6,28 @@ import torchvision.transforms.v2 as T
 from torch.utils.data import DataLoader
 import os
 import mlflow
-from evaluation.evaluation_metrics import centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_with_confidence
-from training_frameworks.evaluate_one_epoch import evaluate
-from training_frameworks.train_one_epoch import train_one_epoch
+from evaluation.evaluation_metrics import centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence
+from training_frameworks.evaluate_one_epoch import evaluate_stitching
+from training_frameworks.train_one_epoch import train_image_stitching
+from torch.utils.data import random_split
 
 
 if __name__ == "__main__":
 
     train_params = {
-        "epochs": 250,
-        "batch_size": 42,
-        "lr": 1e-4, #sqrt(batch_size)*4e-4
+        "epochs": 100,
+        "batch_size": 32,
+        "lr": 5e-5, #sqrt(batch_size)*4e-4
         "model_path": None,
-        "training_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat_Training_Channel_Mixture_C/train",
-        "validation_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat_Training_Channel_Mixture_C/val",
-        "gpu": 3,
-        "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_with_confidence], 
+        "training_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/satsim_sats_dataset",
+        "validation_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/satsim_sats_dataset",
+        "gpu": 5,
+        "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence], 
         "momentum": 0.9,
         "weight_decay": 0.0005, 
-        "experiment_name": "Testing"
+        "experiment_name": "Image_Stitching_Simulated_Only",
+        "sub_batch_size": 40
     }
-
-    # train_params = {
-    #     "epochs": 250,
-    #     "batch_size": 48,
-    #     "lr": 2e-4, #sqrt(batch_size)*4e-4
-    #     "model_path": None,
-    #     "training_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat-2024-06-05_Channel_Mixture_C",
-    #     "validation_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat-2024-06-05_Channel_Mixture_C",
-    #     "gpu": 7,
-    #     "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_with_confidence], 
-    #     "momentum": 0.9,
-    #     "weight_decay": 0.0005, 
-    #     "experiment_name": "TEsting"
-    # }
 
     
 
@@ -58,8 +46,15 @@ if __name__ == "__main__":
     # Load COCO-style dataset
     training_set = CocoDetection(root=training_dir, annFile=os.path.join(training_dir, "annotations", "annotations.json"), transforms=transform)
     validation_set = CocoDetection(root=validation_dir, annFile=os.path.join(validation_dir, "annotations", "annotations.json"), transforms=transform)
-    training_loader = DataLoader(training_set, batch_size=train_params["batch_size"], shuffle=True, collate_fn=lambda x: (zip(*x)))
-    validation_loader = DataLoader(validation_set, batch_size=train_params["batch_size"], shuffle=True, collate_fn=lambda x: (zip(*x)))
+
+
+    train_size = int(0.9 * len(training_set))
+    test_size = len(training_set) - train_size
+
+    train_dataset, test_dataset = random_split(training_set, [train_size, test_size])
+
+    training_loader = DataLoader(train_dataset, batch_size=train_params["batch_size"], shuffle=True, collate_fn=lambda x: (zip(*x)))
+    validation_loader = DataLoader(test_dataset, batch_size=train_params["batch_size"], shuffle=True, collate_fn=lambda x: (zip(*x)))
 
     # Load model
     model =  torchvision.models.detection.retinanet_resnet50_fpn()
@@ -81,9 +76,9 @@ if __name__ == "__main__":
         mlflow.log_params(train_params)
         model.train()
         for epoch in range(train_params["epochs"]):
-            losses = train_one_epoch(model, optimizer, training_loader, device, epoch)
+            losses = train_image_stitching(model, optimizer, training_loader, device, epoch, sub_batch_size=train_params["sub_batch_size"])
             mlflow.log_metrics(losses, epoch) 
-            results = evaluate(model, validation_dir, epoch, validation_loader, train_params["evaluation_metrics"], device)
+            results = evaluate_stitching(model, validation_dir, epoch, validation_loader, train_params["evaluation_metrics"], device,  sub_batch_size=train_params["sub_batch_size"])
             mlflow.log_metrics(results, epoch) 
             torch.save(model.state_dict(), os.path.join(models_dir,f"retinanet_weights_E{epoch}.pt"))
         mlflow.end_run()

@@ -6,7 +6,7 @@ import torchvision.transforms.v2 as T
 from torch.utils.data import DataLoader, ConcatDataset
 import os
 import mlflow
-from evaluation.evaluation_metrics import centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_with_confidence
+from evaluation.evaluation_metrics import centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence
 from training_frameworks.evaluate_one_epoch import evaluate
 from training_frameworks.train_one_epoch import train_one_epoch
 
@@ -16,13 +16,13 @@ if __name__ == "__main__":
     train_params = {
         "epochs": 250,
         "batch_size": 24,
-        "lr": 2e-4, #sqrt(batch_size)*4e-4
+        "lr": 5e-5, #sqrt(batch_size)*4e-4
         "model_path": None,
         "training_dir": ["/data/Sentinel_Datasets/Finalized_datasets/LMNT02Sat_Training_Channel_Mixture_C/train","/data/Sentinel_Datasets/Finalized_datasets/LMNT01Sat_Training_Channel_Mixture_C/train","/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat_Training_Channel_Mixture_C/train"
 ],
         "validation_dir": ["/data/Sentinel_Datasets/Finalized_datasets/LMNT02Sat_Training_Channel_Mixture_C/val","/data/Sentinel_Datasets/Finalized_datasets/LMNT01Sat_Training_Channel_Mixture_C/val","/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat_Training_Channel_Mixture_C/val"],
         "gpu": 6,
-        "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_with_confidence], 
+        "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence], 
         "momentum": 0.9,
         "weight_decay": 0.0005, 
         "experiment_name": "All_Telescope_training"

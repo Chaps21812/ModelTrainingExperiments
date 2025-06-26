@@ -1,2 +1,9 @@
 nohup.out
 .vscode/
+model_training/models/Deformable_DETR
+model_training/models/DT_LSD
+model_training/models/LETR
+model_training/models/Custom_DEF_LETR
+*.log
+*.png
+*.pyc

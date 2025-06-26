@@ -16,7 +16,7 @@ if __name__ == "__main__":
     train_params = {
         "epochs": 250,
         "batch_size": 42,
-        "lr": 2e-4, #sqrt(batch_size)*4e-4
+        "lr": 1e-4, #sqrt(batch_size)*4e-4
         "model_path": None,
         "training_dir": "/data/Sentinel_Datasets/Finalized_datasets/LMNT01Sat_Training_Channel_Mixture_C/train",
         "validation_dir": "/data/Sentinel_Datasets/Finalized_datasets/LMNT01Sat_Training_Channel_Mixture_C/val",

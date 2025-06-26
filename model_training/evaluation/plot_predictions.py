@@ -112,7 +112,8 @@ def plot_image_stitch_bbox(images, targets, padding = 20, show=False, alpha=.4):
     # for index, (image, prediction_results, target_results) in enumerate(zip(images, predictions, targets)):
     for index, (image, target_results) in enumerate(zip(images, targets)):
         target_boxes = target_results["boxes"].detach().cpu()
-        id = target_results["image_id"].detach().cpu()
+        id = target_results["image_id"]
+        image_index = target_results["image_step_id"]
         x_index = target_results["lower_x_bound"]
         y_index = target_results["lower_y_bound"]
         # prediction_boxes = prediction_results["boxes"].detach().cpu()
@@ -123,9 +124,9 @@ def plot_image_stitch_bbox(images, targets, padding = 20, show=False, alpha=.4):
             plt.clf() 
             plt.close('all')
             fig, ax = plt.subplots(1,2, figsize=(10,4))
-            ax[0].set_title(f"{id} Full cropped image X:{x_index} Y:{y_index} TGT: {target_boxes.shape[0]}")
+            ax[0].set_title(f"Full cropped image I: {id}, TID: {image_index}, X:{x_index},  Y:{y_index}")
             ax[0].imshow(img_hwc)
-            ax[1].set_title(f"{id} Target {line_index+1}")
+            ax[1].set_title(f"TGT#: {line_index+1}, Total_TGTS: {target_boxes.shape[0]}")
             ax[1].imshow(img_hwc)
 
             x1 = line_row[0].item()
