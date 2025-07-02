@@ -28,8 +28,19 @@ class NMS(torch.nn.Module):
         eof = False
         index = 0
         while not eof:
+            if predictions.shape[1] == 0: 
+                index+=1
+                if index >= predictions.shape[1]:
+                    eof=True
+                continue
+
             sorted_indicies = predictions[4,:].argsort(dim=0, descending=True) #[detections]
             sorted_indicies = sorted_indicies.squeeze()
+            if sorted_indicies.ndim == 0: 
+                index+=1
+                if index >= predictions.shape[1]:
+                    eof=True
+                continue
 
             best_box = predictions[0:4, sorted_indicies[index]]
             if best_box.ndim == 1:

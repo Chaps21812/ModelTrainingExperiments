@@ -6,7 +6,7 @@ import torchvision.transforms.v2 as T
 from torch.utils.data import DataLoader, ConcatDataset
 import os
 import mlflow
-from evaluation.evaluation_metrics import centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence
+from evaluation.evaluation_metrics_deprecated import centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence
 from training_frameworks.evaluate_one_epoch import evaluate_stitching
 from training_frameworks.train_one_epoch import train_image_stitching
 
@@ -14,18 +14,18 @@ from training_frameworks.train_one_epoch import train_image_stitching
 if __name__ == "__main__":
 
     train_params = {
-        "epochs": 150,
-        "batch_size": 1,
-        "lr": 1e-4, #sqrt(batch_size)*4e-4
+        "epochs": 250,
+        "batch_size": 8,
+        "lr": 1e-5, #sqrt(batch_size)*4e-4
         "model_path": None,
-        "training_dir": ["/data/Sentinel_Datasets/Finalized_datasets/LMNT02Sat_Training_Channel_Mixture_C/train","/data/Sentinel_Datasets/Finalized_datasets/LMNT01Sat_Training_Channel_Mixture_C/train","/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat_Training_Channel_Mixture_C/train"],
-        "validation_dir": ["/data/Sentinel_Datasets/Finalized_datasets/LMNT02Sat_Training_Channel_Mixture_C/val","/data/Sentinel_Datasets/Finalized_datasets/LMNT01Sat_Training_Channel_Mixture_C/val","/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat_Training_Channel_Mixture_C/val"],
-        "gpu": 3,
+        "training_dir": ["/data/Sentinel_Datasets/Finalized_datasets/MixedSensors_MixtureC_Training/train"],
+        "validation_dir": ["/data/Sentinel_Datasets/Finalized_datasets/MixedSensors_MixtureC_Training/val"],
+        "gpu": 5,
         "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence], 
         "momentum": 0.9,
         "weight_decay": 0.0005, 
-        "experiment_name": "Image_Stitching_All_data",
-        "sub_batch_size": 40
+        "experiment_name": "Image_Stitching_All_Sensors",
+        "sub_batch_size": 24
     }
 
     

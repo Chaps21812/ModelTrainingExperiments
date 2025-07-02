@@ -96,67 +96,6 @@ def partition_images(images:list, targets:list=None, device="cuda:0", sizeX:int=
 
     return cropped_images, cropped_targets
 
-def recombine_annotations(empty_image_info, predictions, device="cuda:0"):
-    image_compilation_dict = {}
-    previous_bounds = []
-    for target,prediction in zip(empty_image_info, predictions):
-        #Create a dictionary containing all information relevant to cropped image
-        bound_dict = {"LX":target["lower_x_bound"],
-         "LY":target["lower_y_bound"],
-         "UX":target["upper_x_bound"],
-         "UY":target["upper_y_bound"], 
-         "image_id":target["image_id"],
-         "Detections": torch.empty((0,4)).to(device),
-         "Scores": torch.empty((0,1)).to(device)}
-        
-        #If the image belongs to a certian original image, then do the appropriate math
-        orig_index = bound_dict["image_id"]
-        if orig_index not in image_compilation_dict:
-            image_compilation_dict[orig_index] = {}
-            image_compilation_dict[orig_index]["boxes"] = torch.empty((0,4)).to(device)
-            image_compilation_dict[orig_index]["scores"] = torch.empty((0,1)).to(device)
-            image_compilation_dict[orig_index]["labels"] = torch.empty((0,1)).to(device)
-            previous_bounds = []
-
-        #Look at all predictions for small cropping
-        for l, row in enumerate(prediction["boxes"]):
-            #Get data from cropping prediction
-            score = prediction["scores"][l]
-            label = prediction["labels"][l]
-            _bbox = row.clone().detach()
-            _bbox[0] += target["lower_x_bound"]
-            _bbox[1] += target["lower_y_bound"]
-            _bbox[2] += target["lower_x_bound"]
-            _bbox[3] += target["lower_y_bound"]
-            _bbox = _bbox.to(device)
-
-            #Check if the bbox is completely inbounds for a previous detection
-            completely_inbounds = False
-            for bounded_area in previous_bounds:
-                LX_inbounds = bounded_area["LX"] < _bbox[0] < bounded_area["UX"] 
-                LY_inbounds = bounded_area["LY"] < _bbox[1] < bounded_area["UY"]
-                UX_inbounds = bounded_area["LX"] < _bbox[2] < bounded_area["UX"]
-                UY_inbounds = bounded_area["LY"] < _bbox[3] < bounded_area["UY"]
-                completely_inbounds = LX_inbounds and LY_inbounds and UX_inbounds and UY_inbounds
-                if completely_inbounds: break
-
-            #If the bounding box hasnt been completely inbounds for a previous cropped image "new box", then add to detections
-            if not completely_inbounds:
-                image_compilation_dict[orig_index]["boxes"] = torch.vstack([image_compilation_dict[orig_index]["boxes"],_bbox]).to(device)
-                image_compilation_dict[orig_index]["scores"] = torch.vstack([image_compilation_dict[orig_index]["scores"],score]).to(device)
-                image_compilation_dict[orig_index]["labels"] = torch.vstack([image_compilation_dict[orig_index]["labels"],label]).to(device)
-
-            #Else we have already seen this detection, do nothing. 
-        #Add the previous bounds to the list of seen bounds to cross reference later
-        previous_bounds.append(bound_dict)
-
-    output_targets = []
-    for i in range(len(image_compilation_dict)):
-        output_targets.append(image_compilation_dict[i])
-        
-    return output_targets
-
-
 #Cropping inspired from https://github.com/Koldim2001/YOLO-Patch-Based-Inference/blob/main/patched_yolo_infer/elements/CropElement.py#L5
 def generate_crops(
         images:list, 
@@ -290,17 +229,18 @@ def generate_crops(
             torch.cuda.empty_cache() 
         return cropped_images, cropped_targets
 
-def recombine_annotations_V2(empty_image_info, predictions, device="cuda:0"):
+def recombine_annotations(empty_image_info, predictions, device="cuda:0"):
     image_compilation_dict = {}
+    previous_bounds = []
     for target,prediction in zip(empty_image_info, predictions):
         #Create a dictionary containing all information relevant to cropped image
         bound_dict = {"LX":target["lower_x_bound"],
-         "LY":target["lower_y_bound"],
-         "UX":target["upper_x_bound"],
-         "UY":target["upper_y_bound"], 
-         "image_id":target["image_id"],
-         "Detections": torch.empty((0,4)).to(device),
-         "Scores": torch.empty((0,1)).to(device)}
+        "LY":target["lower_y_bound"],
+        "UX":target["upper_x_bound"],
+        "UY":target["upper_y_bound"], 
+        "image_id":target["image_id"],
+        "Detections": torch.empty((0,4)).to(device),
+        "Scores": torch.empty((0,1)).to(device)}
         
         #If the image belongs to a certian original image, then do the appropriate math
         orig_index = bound_dict["image_id"]
@@ -309,6 +249,7 @@ def recombine_annotations_V2(empty_image_info, predictions, device="cuda:0"):
             image_compilation_dict[orig_index]["boxes"] = torch.empty((0,4)).to(device)
             image_compilation_dict[orig_index]["scores"] = torch.empty((0,1)).to(device)
             image_compilation_dict[orig_index]["labels"] = torch.empty((0,1)).to(device)
+            previous_bounds = []
 
         #Look at all predictions for small cropping
         for l, row in enumerate(prediction["boxes"]):
@@ -322,18 +263,240 @@ def recombine_annotations_V2(empty_image_info, predictions, device="cuda:0"):
             _bbox[3] += target["lower_y_bound"]
             _bbox = _bbox.to(device)
 
-            image_compilation_dict[orig_index]["boxes"] = torch.vstack([image_compilation_dict[orig_index]["boxes"],_bbox]).to(device)
-            image_compilation_dict[orig_index]["scores"] = torch.vstack([image_compilation_dict[orig_index]["scores"],score]).to(device)
-            image_compilation_dict[orig_index]["labels"] = torch.vstack([image_compilation_dict[orig_index]["labels"],label]).to(device)
+            #Check if the bbox is completely inbounds for a previous detection
+            completely_inbounds = False
+            for bounded_area in previous_bounds:
+                LX_inbounds = bounded_area["LX"] < _bbox[0] < bounded_area["UX"] 
+                LY_inbounds = bounded_area["LY"] < _bbox[1] < bounded_area["UY"]
+                UX_inbounds = bounded_area["LX"] < _bbox[2] < bounded_area["UX"]
+                UY_inbounds = bounded_area["LY"] < _bbox[3] < bounded_area["UY"]
+                completely_inbounds = LX_inbounds and LY_inbounds and UX_inbounds and UY_inbounds
+                if completely_inbounds: break
+
+            #If the bounding box hasnt been completely inbounds for a previous cropped image "new box", then add to detections
+            if not completely_inbounds:
+                image_compilation_dict[orig_index]["boxes"] = torch.vstack([image_compilation_dict[orig_index]["boxes"],_bbox]).to(device)
+                image_compilation_dict[orig_index]["scores"] = torch.vstack([image_compilation_dict[orig_index]["scores"],score]).to(device)
+                image_compilation_dict[orig_index]["labels"] = torch.vstack([image_compilation_dict[orig_index]["labels"],label]).to(device)
 
             #Else we have already seen this detection, do nothing. 
         #Add the previous bounds to the list of seen bounds to cross reference later
+        previous_bounds.append(bound_dict)
 
     output_targets = []
     for i in range(len(image_compilation_dict)):
         output_targets.append(image_compilation_dict[i])
         
     return output_targets
+
+
+class ImageStitching(torch.nn.Module):
+    def __init__(self, shape_x: int=512,
+            shape_y: int=512,
+            overlap_x=20,
+            overlap_y=20,):
+        super(ImageStitching, self).__init__()
+        self.shape_x = shape_x
+        self.shape_y = shape_y
+        self.overlap_x = overlap_x
+        self.overlap_y = overlap_y
+
+    #Cropping inspired from https://github.com/Koldim2001/YOLO-Patch-Based-Inference/blob/main/patched_yolo_infer/elements/CropElement.py#L5
+    def generate_crops(
+            images:list, 
+            targets:list=None, 
+            shape_x: int=512,
+            shape_y: int=512,
+            overlap_x=20,
+            overlap_y=20,
+            device="cuda:0",
+        ):
+            """Preprocessing of the image. Generating crops with overlapping.
+
+            Args:
+                image_full (list[Tensor]): list of torch tensors of an RGB image
+                
+                shape_x (int): size of the crop in the x-coordinate
+                
+                shape_y (int): size of the crop in the y-coordinate
+                
+                overlap_x (float, optional): Percentage of overlap along the x-axis
+                        (how much subsequent crops borrow information from previous ones)
+
+                overlap_y (float, optional): Percentage of overlap along the y-axis
+                        (how much subsequent crops borrow information from previous ones)
+
+                show (bool): enables the mode to display patches using plt.imshow
+
+            """  
+            cross_koef_x = 1 - (overlap_x / 100)
+            cross_koef_y = 1 - (overlap_y / 100)
+
+            cropped_images = []
+            cropped_targets = []
+            image_nnid = 0
+            for j, image in enumerate(images):
+                x_res = image.shape[2] #Watch for X,Y Switch here
+                y_res = image.shape[1] #Watch for X,Y Switch here
+
+                y_steps = int((y_res) / (shape_y * cross_koef_y)) + 1
+                x_steps = int((x_res) / (shape_x * cross_koef_x)) + 1
+                if x_res <= shape_x and y_res <= shape_y:
+                    y_steps = 1
+                    x_steps = 1
+
+                count = 0
+                total_steps = y_steps * x_steps  # Total number of crops
+                for x_step in range(x_steps):
+                    for y_step in range(y_steps):
+                        x_start = int(shape_x * x_step * cross_koef_x)
+                        y_start = int(shape_y * y_step * cross_koef_y)
+
+                        lower_x_bound = max(0, x_start)
+                        upper_x_bound = min(x_res, x_start + shape_x)
+                        lower_y_bound = max(0, y_start)
+                        upper_y_bound = min(y_res, y_start + shape_y)
+
+                        # Check for residuals
+                        if upper_x_bound > x_res:
+                            print('Error in generating crops along the x-axis')
+                            continue
+                        if upper_y_bound > y_res:
+                            print('Error in generating crops along the y-axis')
+                            continue
+
+                        cropped_image = image[:, lower_y_bound:upper_y_bound, lower_x_bound:upper_x_bound]
+                        if cropped_image.shape[1] ==0 or cropped_image.shape[2]==0:
+                            continue
+                        standardized_image = torch.zeros([image.shape[0], shape_x, shape_y])
+                        standardized_image[:, 0:cropped_image.shape[1], 0:cropped_image.shape[2]] = cropped_image
+
+                        partition_dict = {} 
+                        partition_dict["image_id"] = j
+                        partition_dict["image_step_id"] = image_nnid
+                        partition_dict["lower_x_bound"] = lower_x_bound
+                        partition_dict["lower_y_bound"] = lower_y_bound
+                        partition_dict["upper_x_bound"] = upper_x_bound 
+                        partition_dict["upper_y_bound"] = upper_y_bound
+                        
+                        if targets is not None:
+                            target = targets[j]
+                            # partition_dict["image_id"] = target["image_id"]
+                            targets_tensors = torch.empty((0,4)).to(device)
+                            labels_tensor = torch.empty((0,1)).to(device).int()
+                            scores_tensor = torch.empty((0,1)).to(device)
+                            for i, row in enumerate(target["boxes"]):
+                                x_min = row[0]
+                                y_min = row[1]
+                                x_max = row[2]
+                                y_max = row[3]
+
+                                x_min_inbounds = lower_x_bound <= x_min <=upper_x_bound
+                                x_max_inbounds = lower_x_bound <= x_max <=upper_x_bound
+                                y_min_inbounds = lower_y_bound <= y_min <=upper_y_bound
+                                y_max_inbounds = lower_y_bound <= y_max <=upper_y_bound
+                                #This causes targets on the edge to be used
+                                # contains_x = x_min_inbounds or x_max_inbounds
+                                # contains_y = y_min_inbounds or y_max_inbounds
+                                #This causes only targets that are completely in the frame to be used
+                                contains_x = x_min_inbounds and x_max_inbounds
+                                contains_y = y_min_inbounds and y_max_inbounds
+
+                                x_on_edge = x_min_inbounds ^ x_max_inbounds
+                                y_on_edge = y_min_inbounds ^ y_max_inbounds
+
+                                if contains_x:
+                                    transformed_x_min = max(torch.tensor(lower_x_bound).to(device), x_min)-torch.tensor(lower_x_bound).to(device)
+                                    transformed_x_max = min(torch.tensor(upper_x_bound).to(device), x_max)-torch.tensor(lower_x_bound).to(device)
+                                if contains_y: 
+                                    transformed_y_min = max(torch.tensor(lower_y_bound).to(device), y_min)-torch.tensor(lower_y_bound).to(device)
+                                    transformed_y_max = min(torch.tensor(upper_y_bound).to(device), y_max)-torch.tensor(lower_y_bound).to(device)
+                                if contains_x and contains_y:
+                                    bounded_annotation = torch.tensor([transformed_x_min, transformed_y_min, transformed_x_max, transformed_y_max])
+                                    bounded_annotation = bounded_annotation.reshape((1,4)).to(device)
+                                    category_label = torch.tensor(int(target["labels"][i])).to(device)
+                                    score = torch.tensor([1]).to(device)
+                                    scores_tensor = torch.vstack([scores_tensor, score.float()])
+                                    targets_tensors = torch.vstack([targets_tensors, bounded_annotation.float()])
+                                    labels_tensor = torch.vstack([labels_tensor, category_label.int()])
+                            partition_dict["boxes"] = targets_tensors.to(device)
+                            partition_dict["labels"] = labels_tensor.to(device)
+                            partition_dict["scores"] = scores_tensor.to(device)
+                        image_nnid +=1
+
+                        cropped_targets.append(partition_dict)
+                        cropped_images.append(cropped_image.to(device))
+                        cropped_image = cropped_image.cpu()
+                        del cropped_image
+                        torch.cuda.empty_cache() 
+                image = image.cpu()
+                del image
+                torch.cuda.empty_cache() 
+            return cropped_images, cropped_targets
+
+    def recombine_annotations(empty_image_info, predictions, device="cuda:0"):
+        image_compilation_dict = {}
+        previous_bounds = []
+        for target,prediction in zip(empty_image_info, predictions):
+            #Create a dictionary containing all information relevant to cropped image
+            bound_dict = {"LX":target["lower_x_bound"],
+            "LY":target["lower_y_bound"],
+            "UX":target["upper_x_bound"],
+            "UY":target["upper_y_bound"], 
+            "image_id":target["image_id"],
+            "Detections": torch.empty((0,4)).to(device),
+            "Scores": torch.empty((0,1)).to(device)}
+            
+            #If the image belongs to a certian original image, then do the appropriate math
+            orig_index = bound_dict["image_id"]
+            if orig_index not in image_compilation_dict:
+                image_compilation_dict[orig_index] = {}
+                image_compilation_dict[orig_index]["boxes"] = torch.empty((0,4)).to(device)
+                image_compilation_dict[orig_index]["scores"] = torch.empty((0,1)).to(device)
+                image_compilation_dict[orig_index]["labels"] = torch.empty((0,1)).to(device)
+                previous_bounds = []
+
+            #Look at all predictions for small cropping
+            for l, row in enumerate(prediction["boxes"]):
+                #Get data from cropping prediction
+                score = prediction["scores"][l]
+                label = prediction["labels"][l]
+                _bbox = row.clone().detach()
+                _bbox[0] += target["lower_x_bound"]
+                _bbox[1] += target["lower_y_bound"]
+                _bbox[2] += target["lower_x_bound"]
+                _bbox[3] += target["lower_y_bound"]
+                _bbox = _bbox.to(device)
+
+                #Check if the bbox is completely inbounds for a previous detection
+                completely_inbounds = False
+                for bounded_area in previous_bounds:
+                    LX_inbounds = bounded_area["LX"] < _bbox[0] < bounded_area["UX"] 
+                    LY_inbounds = bounded_area["LY"] < _bbox[1] < bounded_area["UY"]
+                    UX_inbounds = bounded_area["LX"] < _bbox[2] < bounded_area["UX"]
+                    UY_inbounds = bounded_area["LY"] < _bbox[3] < bounded_area["UY"]
+                    completely_inbounds = LX_inbounds and LY_inbounds and UX_inbounds and UY_inbounds
+                    if completely_inbounds: break
+
+                #If the bounding box hasnt been completely inbounds for a previous cropped image "new box", then add to detections
+                if not completely_inbounds:
+                    image_compilation_dict[orig_index]["boxes"] = torch.vstack([image_compilation_dict[orig_index]["boxes"],_bbox]).to(device)
+                    image_compilation_dict[orig_index]["scores"] = torch.vstack([image_compilation_dict[orig_index]["scores"],score]).to(device)
+                    image_compilation_dict[orig_index]["labels"] = torch.vstack([image_compilation_dict[orig_index]["labels"],label]).to(device)
+
+                #Else we have already seen this detection, do nothing. 
+            #Add the previous bounds to the list of seen bounds to cross reference later
+            previous_bounds.append(bound_dict)
+
+        output_targets = []
+        for i in range(len(image_compilation_dict)):
+            output_targets.append(image_compilation_dict[i])
+            
+        return output_targets
+
+
+   
+
 
 if __name__ ==  "__main__":  
     import torch

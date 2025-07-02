@@ -15,7 +15,12 @@ class RetinaToSentinel(torch.nn.Module):
             storage_vector[1,:] = (batch_num["boxes"][:,3]+batch_num["boxes"][:,1])/2
             storage_vector[2,:] = (batch_num["boxes"][:,2]-batch_num["boxes"][:,0])
             storage_vector[3,:] = (batch_num["boxes"][:,3]-batch_num["boxes"][:,1])
-            storage_vector[4,:] = batch_num["scores"].unsqueeze(0)
+            if batch_num["scores"].numel() == 0:
+                storage_vector[4,:] = batch_num["scores"].view(0)
+            elif batch_num["scores"].ndim == 1:
+                storage_vector[4,:] = batch_num["scores"]
+            else:
+                storage_vector[4,:] = batch_num["scores"]
             max_length = max(max_length, len(batch_num["boxes"]))
             output_tensors.append(storage_vector)
         finalized_tensors = torch.zeros((len(output_tensors), 5, max_length))

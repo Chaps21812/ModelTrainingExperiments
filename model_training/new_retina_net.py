@@ -6,28 +6,44 @@ import torchvision.transforms.v2 as T
 from torch.utils.data import DataLoader
 import os
 import mlflow
-from evaluation.evaluation_metrics_deprecated import centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence
-from training_frameworks.evaluate_one_epoch import evaluate_stitching
-from training_frameworks.train_one_epoch import train_image_stitching
+from evaluation.evaluation_metrics import centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference
+from training_frameworks.evaluate_one_epoch import evaluate
+from training_frameworks.train_one_epoch import train_one_epoch
+from models.Sentinel_Models.Sentinel_Retina_Net import Sentinel
 
 
 if __name__ == "__main__":
 
+    # train_params = {
+    #     "epochs": 250,
+    #     "batch_size": 48,
+    #     "lr": 1e-4, #sqrt(batch_size)*4e-4
+    #     "model_path": None,
+    #     "training_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat_Training_Channel_Mixture_C/train",
+    #     "validation_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat_Training_Channel_Mixture_C/val",
+    #     "gpu": 3,
+    #     "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence], 
+    #     "momentum": 0.9,
+    #     "weight_decay": 0.0005, 
+    #     "experiment_name": "RME04_MixtureC"
+    # }
+
     train_params = {
         "epochs": 250,
-        "batch_size": 24,
-        "lr": 1e-4, #sqrt(batch_size)*4e-4
+        "batch_size": 48,
+        "lr": 2e-4, #sqrt(batch_size)*4e-4
         "model_path": None,
-        "training_dir": "/data/Sentinel_Datasets/Finalized_datasets/LMNT01Sat_Training_Channel_Mixture_C/train",
-        "validation_dir": "/data/Sentinel_Datasets/Finalized_datasets/LMNT01Sat_Training_Channel_Mixture_C/val",
-        "gpu": 4,
-        "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence], 
+        "training_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat-2024-06-05_Channel_Mixture_C",
+        "validation_dir": "/home/davidchaparro/Repos/Dataset_Compilation_and_Statistics/data_finalized/RME04_MixtureC_Final/RME04Sat-2024-06-05_Channel_Mixture_C",
+        "gpu": 1,
+        "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference], 
         "momentum": 0.9,
         "weight_decay": 0.0005, 
-        "experiment_name": "Image_Stitching_LMNT01",
-        "sub_batch_size": 42
+        "experiment_name": "TEsting"
     }
+
     
+
     # Custom transforms (RetinaNet expects images and targets)
     transform = T.Compose([
         T.ToTensor(),
@@ -47,7 +63,7 @@ if __name__ == "__main__":
     validation_loader = DataLoader(validation_set, batch_size=train_params["batch_size"], shuffle=True, collate_fn=lambda x: (zip(*x)))
 
     # Load model
-    model =  torchvision.models.detection.retinanet_resnet50_fpn()
+    model =  Sentinel()
     if train_params["model_path"] is not None:
         model.load_state_dict(torch.load(train_params["model_path"] ))
         print(f"Loading Model: {train_params["model_path"]}")
@@ -66,9 +82,9 @@ if __name__ == "__main__":
         mlflow.log_params(train_params)
         model.train()
         for epoch in range(train_params["epochs"]):
-            losses = train_image_stitching(model, optimizer, training_loader, device, epoch, sub_batch_size=train_params["sub_batch_size"])
+            losses = train_one_epoch(model, optimizer, training_loader, device, epoch)
             mlflow.log_metrics(losses, epoch) 
-            results = evaluate_stitching(model, validation_dir, epoch, validation_loader, train_params["evaluation_metrics"], device,  sub_batch_size=train_params["sub_batch_size"])
+            results = evaluate(model, validation_dir, epoch, validation_loader, train_params["evaluation_metrics"], device)
             mlflow.log_metrics(results, epoch) 
             torch.save(model.state_dict(), os.path.join(models_dir,f"retinanet_weights_E{epoch}.pt"))
         mlflow.end_run()

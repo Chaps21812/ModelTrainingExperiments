@@ -89,8 +89,6 @@ def train_LETR_one_epoch(model, criterion, postprocessors, dataloader, optimizer
 
     return loss_dict_reduced_scaled
 
-
-
 def train_DEF_DETR_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     dataloader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, max_norm: float = 0):

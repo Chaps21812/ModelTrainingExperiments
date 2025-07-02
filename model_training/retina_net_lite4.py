@@ -6,7 +6,7 @@ import torchvision.transforms.v2 as T
 from torch.utils.data import DataLoader, ConcatDataset
 import os
 import mlflow
-from evaluation.evaluation_metrics import centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence
+from evaluation.evaluation_metrics_deprecated import centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence
 from training_frameworks.evaluate_one_epoch import evaluate
 from training_frameworks.train_one_epoch import train_one_epoch
 

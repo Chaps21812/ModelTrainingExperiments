@@ -1,5 +1,7 @@
 nohup.out
 .vscode/
+mlruns/
+logs/
 model_training/models/Deformable_DETR
 model_training/models/DT_LSD
 model_training/models/LETR

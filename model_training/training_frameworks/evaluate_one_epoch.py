@@ -50,10 +50,12 @@ def evaluate_stitching(model, dataset_directory:str, epoch:int, dataloader:DataL
         sub_batch_image = [images_cropped_predicted[i:i + sub_batch_size] for i in range(0, len(images_cropped_predicted), sub_batch_size)]
 
         temporary_outputs = []
-        for sub_images in sub_batch_image:
-            outputs = model(sub_images)
-            temporary_outputs.extend(outputs)
-            torch.cuda.empty_cache() 
+        with torch.no_grad():
+            for sub_images in sub_batch_image:
+                outputs = model(sub_images)
+                temporary_outputs.extend(outputs)
+                del sub_images
+                torch.cuda.empty_cache() 
 
         recombined_targets_predicted = recombine_annotations(empty_targets, temporary_outputs, device=device)
 

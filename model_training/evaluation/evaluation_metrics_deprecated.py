@@ -4,33 +4,27 @@ import torch
 
 def _find_centroid(tensor: Tensor) -> Tensor:
     """
-    Find the centroid of the bounding box given XC, YC, W, H.Tensor must be in shape [5,N].
+    Find the centroid of the bounding box given X1, Y1, X2, Y2.Tensor must be in shape [N,4].
 
     Args:
-        tensor (tensor): tensor bounding box [XC, YC, W, H], shape [5,N]
+        tensor (tensor): tensor bounding box [X1,Y1,X2,Y2], shape [N,4]
 
     Returns:
         centroids (tensor): Torch tensor of centroids
     """
-    x = tensor[0,:].transpose(1,0)
-    y = tensor[1,:].transpose(1,0)
-    if x.ndim == 1:
-        x.unsqueeze(0)
-    if y.ndim == 1:
-        y.unsqueeze(0)
-    if x.ndim == 3:
-        x.squeeze()
-    if y.ndim == 3:
-        y.squeeze()
+    x = (tensor[:,2]+tensor[:,0])/2
+    y = (tensor[:,3]+tensor[:,1])/2
     centroids = torch.stack((x,y), dim=1)
+    if centroids.ndim == 3:
+        print("bruh")
     return centroids
 
 def _calculate_true_positives(centroids:Tensor, targets:Tensor) -> tuple[Tensor, Tensor]:
     """
-    Find the centroid of the bounding box given XC, YC, W, H.Tensor must be in shape [N,4].
+    Find the centroid of the bounding box given X1, Y1, X2, Y2.Tensor must be in shape [N,4].
 
     Args:
-        tensor (tensor): tensor bounding box [XC, YC, W, H], shape [N,4]
+        tensor (tensor): tensor bounding box [X1,Y1,X2,Y2], shape [N,4]
 
     Returns:
         centroids (tensor): List of files present in the train test split
@@ -38,10 +32,10 @@ def _calculate_true_positives(centroids:Tensor, targets:Tensor) -> tuple[Tensor,
     predicted_x = centroids[:,0].unsqueeze(1)
     predicted_y = centroids[:,1].unsqueeze(1)
 
-    target_x1 = targets[0,:].transpose(1,0).unsqueeze(0)
-    target_y1 = targets[1,:].transpose(1,0).unsqueeze(0)
-    target_x2 = targets[2,:].transpose(1,0).unsqueeze(0)
-    target_y2 = targets[3,:].transpose(1,0).unsqueeze(0)
+    target_x1 = targets[:, 0].unsqueeze(0)
+    target_y1 = targets[:, 1].unsqueeze(0)
+    target_x2 = targets[:, 2].unsqueeze(0)
+    target_y2 = targets[:, 3].unsqueeze(0)
 
     inside_x = (predicted_x >= target_x1) & (predicted_x <= target_x2)
     inside_y = (predicted_y >= target_y1) & (predicted_y <= target_y2)
@@ -56,18 +50,9 @@ def _calculate_true_positives(centroids:Tensor, targets:Tensor) -> tuple[Tensor,
     return true_positives.item(), false_positives.item(), false_negatives.item()
 
 def _calculate_IOU(predictions: Tensor, targets: Tensor):
-    xc_prediction, yc_prediction, width_prediction, height_prediction = predictions[0, :], predictions[1, :], predictions[2, :], predictions[3, :]
-    xc_target, yc_target, width_target, height_target = targets[0, :], targets[1, :], targets[2, :], targets[3, :]
+    x1_prediction, y1_prediction, x2_prediction, y2_prediction = predictions[:, 0], predictions[:, 1], predictions[:, 2], predictions[:, 3]
+    x1_target, y1_target, x2_target, y2_target = targets[:, 0], targets[:, 1], targets[:, 2], targets[:, 3]
 
-    x1_prediction = xc_prediction-width_prediction/2
-    y1_prediction = yc_prediction-height_prediction/2
-    x2_prediction = xc_prediction+width_prediction/2
-    y2_prediction = yc_prediction+height_prediction/2
-
-    x1_target = xc_target-width_target/2
-    y1_target = yc_target-height_target/2
-    x2_target = xc_target+width_target/2
-    y2_target = yc_target+height_target/2
 
     intersect_x1 = torch.maximum(x1_prediction[:,None], x1_target)
     intersect_y1 = torch.maximum(y1_prediction[:,None], y1_target)
@@ -96,6 +81,15 @@ def _calculate_nearest_box_loss(prediction_centroids:Tensor, target_centroids:Te
     if target_centroids.numel() == 0 and prediction_centroids.numel() == 0:
         return 0
 
+    if prediction_centroids.ndim ==1:
+        prediction_centroids.unsqueeze(0)
+    if target_centroids.ndim ==1:
+        target_centroids.unsqueeze(0)
+
+    if prediction_centroids.ndim >= 3:
+        prediction_centroids.squeeze()
+    if target_centroids.ndim >= 3:
+        target_centroids.squeeze()
 
     differences = prediction_centroids[:,None,:] - target_centroids[None, :,:]
     distances = torch.norm(differences, dim=2)
@@ -259,8 +253,8 @@ def calculate_bbox_metrics(preds: list,targets: list) -> dict:
     gt_offsets = []
 
     for prediction, target in zip(preds, targets):
-        iou_scores = _calculate_IOU(prediction[:4,:], target[:4,:])
-        scores = prediction[4,:]  # shape (N_i,)
+        iou_scores = _calculate_IOU(prediction["boxes"], target["boxes"])
+        scores = prediction["scores"]  # shape (N_i,)
 
         # Adjust ground truth indices to global count
         all_iou_rows.append(iou_scores)  # keep original shape, to be padded later
@@ -307,8 +301,8 @@ def centroid_accuracy(preds:list, targets:list) -> dict:
     FP = 0
     FN = 0
     for prediction, target in zip(preds, targets):
-        centroids = _find_centroid(prediction[:4,:])
-        tp, fp, fn = _calculate_true_positives(centroids, target[:4,:])
+        centroids = _find_centroid(prediction["boxes"])
+        tp, fp, fn = _calculate_true_positives(centroids, target["boxes"])
         TP += tp
         FP += fp
         FN += fn
@@ -324,8 +318,8 @@ def calculate_centroid_difference(preds:list, targets:list) -> dict:
     target_box_surplus = []
 
     for prediction, target in zip(preds, targets):
-        predicted_centroids = _find_centroid(prediction[:4,:])
-        target_centroids = _find_centroid(target[:4,:])
+        predicted_centroids = _find_centroid(prediction["boxes"])
+        target_centroids = _find_centroid(target["boxes"])
 
         centroid_distances = _calculate_nearest_box_loss(predicted_centroids, target_centroids)
         num_pred_boxes = len(predicted_centroids)
@@ -337,3 +331,88 @@ def calculate_centroid_difference(preds:list, targets:list) -> dict:
         avg_distance.append(centroid_distances/max(1, num_pred_boxes))    
     
     return {"Median_predicted_boxes": np.mean(num_boxes), "Median_total_distance": np.median(total_distance), "Median_centroid_distance": np.median(target_box_surplus), "Median_box_surplus": np.median(avg_distance),  "Mean_predicted_boxes": np.mean(num_boxes), "Mean_total_distance": np.mean(total_distance), "Mean_centroid_distance": np.mean(target_box_surplus), "Mean_box_surplus": np.mean(avg_distance)}
+
+def calculate_centroid_difference_90_confidence(preds:list, targets:list, confidence_threshold=.90) -> dict:
+    num_boxes = []
+    total_distance = []
+    avg_distance = []
+    target_box_surplus = []
+
+    for prediction, target in zip(preds, targets):
+        predicted_centroids = _find_centroid(prediction["boxes"])
+        target_centroids = _find_centroid(target["boxes"])
+
+        boxes_above_threshold = torch.nonzero(prediction["scores"] > confidence_threshold).squeeze()
+        predicted_centroids = predicted_centroids[boxes_above_threshold,:]
+        # if len(predicted_centroids) > 1:
+        #     print("More than 1")
+        if predicted_centroids.ndim == 1:
+            # print("Bug causing centroids to lose a dimension")
+            # print(predicted_centroids.shape)
+            predicted_centroids = predicted_centroids.unsqueeze(0)
+            # print(predicted_centroids.shape)
+        # if predicted_centroids.shape[1] != 2:
+        #     print("Tensor has wrong second dimension")
+        #     print(predicted_centroids.shape)
+
+        centroid_distances = _calculate_nearest_box_loss(predicted_centroids, target_centroids)
+        num_pred_boxes = len(predicted_centroids)
+        num_target_boxes = len(target_centroids)
+
+        num_boxes.append(num_pred_boxes)
+        total_distance.append(centroid_distances)
+        target_box_surplus.append(num_pred_boxes-num_target_boxes)
+        avg_distance.append(centroid_distances/max(1, num_pred_boxes))    
+    
+    if len(num_boxes) ==0:
+        num_boxes.append(256)
+        total_distance.append(256)
+        target_box_surplus.append(256)
+        avg_distance.append(256)    
+
+
+    return {"Median_predicted_boxes_90c": np.mean(num_boxes), "Median_total_distance_90c": np.median(total_distance), "Median_centroid_distance_90c": np.median(target_box_surplus), "Median_box_surplus_90c": np.median(avg_distance),  "Mean_predicted_boxes_90c": np.mean(num_boxes), "Mean_total_distance_90c": np.mean(total_distance), "Mean_centroid_distance_90c": np.mean(target_box_surplus), "Mean_box_surplus_90c": np.mean(avg_distance)}
+
+def calculate_centroid_difference_10_confidence(preds:list, targets:list, confidence_threshold=.10) -> dict:
+    num_boxes = []
+    total_distance = []
+    avg_distance = []
+    target_box_surplus = []
+
+    for prediction, target in zip(preds, targets):
+        predicted_centroids = _find_centroid(prediction["boxes"])
+        target_centroids = _find_centroid(target["boxes"])
+
+        boxes_above_threshold = torch.nonzero(prediction["scores"].squeeze() > confidence_threshold)
+        predicted_centroids = predicted_centroids[boxes_above_threshold.squeeze(),:]
+        # if len(predicted_centroids) > 1:
+        #     print("More than 1")
+        if predicted_centroids.ndim == 1:
+            predicted_centroids = predicted_centroids.unsqueeze(0)
+        if predicted_centroids.ndim == 3:
+            print("BRuh")
+            # print("Bug causing centroids to lose a dimension")
+            # print(predicted_centroids.shape)
+            # print(predicted_centroids.shape)
+        # if predicted_centroids.shape[1] != 2:
+        #     print("Tensor has wrong second dimension")
+        #     print(predicted_centroids.shape)
+
+        centroid_distances = _calculate_nearest_box_loss(predicted_centroids, target_centroids)
+        num_pred_boxes = len(predicted_centroids)
+        num_target_boxes = len(target_centroids)
+
+        num_boxes.append(num_pred_boxes)
+        total_distance.append(centroid_distances)
+        target_box_surplus.append(num_pred_boxes-num_target_boxes)
+        avg_distance.append(centroid_distances/max(1, num_pred_boxes))    
+    
+    if len(num_boxes) ==0:
+        num_boxes.append(256)
+        total_distance.append(256)
+        target_box_surplus.append(256)
+        avg_distance.append(256)    
+
+
+    return {"Median_predicted_boxes_10c": np.mean(num_boxes), "Median_total_distance_10c": np.median(total_distance), "Median_centroid_distance_10c": np.median(target_box_surplus), "Median_box_surplus_10c": np.median(avg_distance),  "Mean_predicted_boxes_10c": np.mean(num_boxes), "Mean_total_distance_10c": np.mean(total_distance), "Mean_centroid_distance_10c": np.mean(target_box_surplus), "Mean_box_surplus_10c": np.mean(avg_distance)}
+
