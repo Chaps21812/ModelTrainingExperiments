@@ -12,8 +12,8 @@ def _find_centroid(tensor: Tensor) -> Tensor:
     Returns:
         centroids (tensor): Torch tensor of centroids
     """
-    x = tensor[0,:].transpose(1,0)
-    y = tensor[1,:].transpose(1,0)
+    x = tensor[0,:]
+    y = tensor[1,:]
     if x.ndim == 1:
         x.unsqueeze(0)
     if y.ndim == 1:
@@ -22,7 +22,7 @@ def _find_centroid(tensor: Tensor) -> Tensor:
         x.squeeze()
     if y.ndim == 3:
         y.squeeze()
-    centroids = torch.stack((x,y), dim=1)
+    centroids = torch.stack((x,y), dim=0).transpose(1,0)
     return centroids
 
 def _calculate_true_positives(centroids:Tensor, targets:Tensor) -> tuple[Tensor, Tensor]:
@@ -38,13 +38,13 @@ def _calculate_true_positives(centroids:Tensor, targets:Tensor) -> tuple[Tensor,
     predicted_x = centroids[:,0].unsqueeze(1)
     predicted_y = centroids[:,1].unsqueeze(1)
 
-    target_x1 = targets[0,:].transpose(1,0).unsqueeze(0)
-    target_y1 = targets[1,:].transpose(1,0).unsqueeze(0)
-    target_x2 = targets[2,:].transpose(1,0).unsqueeze(0)
-    target_y2 = targets[3,:].transpose(1,0).unsqueeze(0)
+    target_x_centroid = targets[0,:].unsqueeze(0)
+    target_y_centroid = targets[1,:].unsqueeze(0)
+    target_width = targets[2,:].unsqueeze(0)
+    target_height = targets[3,:].unsqueeze(0)
 
-    inside_x = (predicted_x >= target_x1) & (predicted_x <= target_x2)
-    inside_y = (predicted_y >= target_y1) & (predicted_y <= target_y2)
+    inside_x = (predicted_x >= target_x_centroid - target_width/2) & (predicted_x <= target_x_centroid + target_width/2)
+    inside_y = (predicted_y >= target_y_centroid - target_height/2) & (predicted_y <= target_y_centroid + target_height/2)
     truth_table = (inside_x & inside_y)
     target_matched = truth_table.any(dim=0)
     prediction_matched = truth_table.any(dim=1)
@@ -259,8 +259,14 @@ def calculate_bbox_metrics(preds: list,targets: list) -> dict:
     gt_offsets = []
 
     for prediction, target in zip(preds, targets):
-        iou_scores = _calculate_IOU(prediction[:4,:], target[:4,:])
-        scores = prediction[4,:]  # shape (N_i,)
+        mask = prediction[4] != 0
+        processed_predictions = prediction[:,mask]
+        mask = target[4] != 0
+        processed_targets = target[:,mask]
+
+
+        iou_scores = _calculate_IOU(processed_predictions[:4,:], processed_targets[:4,:])
+        scores = processed_predictions[4,:]  # shape (N_i,)
 
         # Adjust ground truth indices to global count
         all_iou_rows.append(iou_scores)  # keep original shape, to be padded later
@@ -307,8 +313,13 @@ def centroid_accuracy(preds:list, targets:list) -> dict:
     FP = 0
     FN = 0
     for prediction, target in zip(preds, targets):
-        centroids = _find_centroid(prediction[:4,:])
-        tp, fp, fn = _calculate_true_positives(centroids, target[:4,:])
+        mask = prediction[4] != 0
+        processed_predictions = prediction[:,mask]
+        mask = target[4] != 0
+        processed_targets = target[:,mask]
+
+        centroids = _find_centroid(processed_predictions[:4,:])
+        tp, fp, fn = _calculate_true_positives(centroids, processed_targets[:4,:])
         TP += tp
         FP += fp
         FN += fn
@@ -317,15 +328,20 @@ def centroid_accuracy(preds:list, targets:list) -> dict:
     f1 = precision*recall/(precision+recall+1e-8)
     return {"Anchor_F1": f1, "Anchor_Precision": precision, "Anchor_Recall ": recall}
 
-def calculate_centroid_difference(preds:list, targets:list) -> dict:
+def calculate_centroid_difference(preds:torch.Tensor, targets:torch.Tensor) -> dict:
     num_boxes = []
     total_distance = []
     avg_distance = []
     target_box_surplus = []
 
     for prediction, target in zip(preds, targets):
-        predicted_centroids = _find_centroid(prediction[:4,:])
-        target_centroids = _find_centroid(target[:4,:])
+        mask = prediction[4] != 0
+        processed_predictions = prediction[:,mask]
+        mask = target[4] != 0
+        processed_targets = target[:,mask]
+
+        predicted_centroids = _find_centroid(processed_predictions[:4,:])
+        target_centroids = _find_centroid(processed_targets[:4,:])
 
         centroid_distances = _calculate_nearest_box_loss(predicted_centroids, target_centroids)
         num_pred_boxes = len(predicted_centroids)

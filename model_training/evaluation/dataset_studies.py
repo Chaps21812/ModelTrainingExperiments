@@ -4,6 +4,7 @@ import re
 import matplotlib.pyplot as plt
 import os
 import mlflow
+import numpy as np
 
 
 class Dataset_study():
@@ -20,10 +21,12 @@ class Dataset_study():
                 self.basename = os.path.basename(path.split(match.group())[0])
 
         self.output_directory = out_put_directory
+        self.overal__metrics_path = os.path.join(self.output_directory, "overal_metrics.txt")
         self.figure_folder = os.path.join(self.output_directory, "figures")
         self.pickle_path = os.path.join(self.output_directory, f"{self.basename}_{title}.pkl")
         os.makedirs(self.output_directory, exist_ok=True)
         os.makedirs(self.figure_folder, exist_ok=True)
+        self.cumulative_metrics = {}
 
 
     def save(self):
@@ -35,7 +38,11 @@ class Dataset_study():
     def load(self, filename:str):
         """Load an object from a pickle file."""
         with open(filename, 'rb') as f:
-            return pickle.load(f)
+            object = pickle.load(f)
+            object.pickle_path = filename
+            object.output_directory = os.path.dirname(filename)
+            object.figure_folder = os.path.join(object.output_directory, "figures")
+            return object
         
     def __iter__(self):
         return self  # the iterator is the object itself
@@ -67,14 +74,24 @@ class Dataset_study():
     def plot_metric(self, metric:str):
         self.dataframe = self.dataframe.sort_values(by="date")
         save_path = os.path.join(self.figure_folder, f"{metric}-{self.basename}.png")
+        mean = np.mean(self.dataframe[metric])
+        std = np.std(self.dataframe[metric])
         plt.clf() 
         plt.close('all')
-        plt.figure(figsize=(8,8)) 
-        plt.plot(self.dataframe["date"], self.dataframe[metric], color="teal")
+        plt.figure(figsize=(8,9)) 
+        plt.axhline(mean, color='red', linestyle='-', label=f'Mean: {mean}',  alpha=0.5)          # Solid red line
+        plt.axhline(mean + std, color='red', linestyle='--', label=f'STD: {std}',  alpha=0.5)  # Dashed red line
+        plt.axhline(mean - std, color='red', linestyle='--', alpha=0.5)  # Dashed red line
+        plt.plot(self.dataframe["date"], self.dataframe[metric], color="teal", label=f"{metric}")
+
+        if metric != "date":
+            if np.max(self.dataframe[metric]) < 1.0:
+                plt.ylim(0,1)
+
+        plt.legend(loc='lower right')
         plt.xticks(self.dataframe["date"].tolist(), rotation=45)
         plt.xlabel("Dataset Date")
         plt.ylabel(f"{metric}")
-        plt.ylim(0,1)
         plt.title(f"{self.basename}: {metric} vs Date")
         plt.savefig(save_path)
         mlflow.log_artifact(save_path)
@@ -84,5 +101,7 @@ class Dataset_study():
         for key in self.dataframe.columns:
             self.plot_metric(key)
 
-
-    
+    def save_cumulative_metrics(self):
+        with open(self.overal__metrics_path, 'w') as f:
+            for key, value in self.cumulative_metrics.items():
+                f.write(f"{key}: {value}\n")

@@ -25,7 +25,7 @@ if __name__ == "__main__":
         "momentum": 0.9,
         "weight_decay": 0.0005, 
         "experiment_name": "Image_Stitching_All_Sensors",
-        "sub_batch_size": 24
+        "sub_batch_size": 36
     }
 
     
@@ -45,10 +45,11 @@ if __name__ == "__main__":
     # Load COCO-style dataset
     training_sets = []
     validation_sets = []
-    for training_set,validation_set in zip(train_params["training_dir"], train_params["validation_dir"]):
-        temp_training = CocoDetection(root=training_dir, annFile=os.path.join(training_dir, "annotations", "annotations.json"), transforms=transform)
-        temp_validation = CocoDetection(root=validation_dir, annFile=os.path.join(validation_dir, "annotations", "annotations.json"), transforms=transform)
+    for training_set in train_params["training_dir"]:
+        temp_training = CocoDetection(root=training_set, annFile=os.path.join(training_set, "annotations", "annotations.json"), transforms=transform)
         training_sets.append(temp_training)
+    for validation_set in train_params["validation_dir"]:
+        temp_validation = CocoDetection(root=validation_set, annFile=os.path.join(validation_set, "annotations", "annotations.json"), transforms=transform)
         validation_sets.append(temp_validation)
 
     training_set = ConcatDataset(training_sets)

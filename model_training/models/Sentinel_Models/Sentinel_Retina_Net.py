@@ -9,11 +9,12 @@ from astropy.visualization import ZScaleInterval
 
 
 class Sentinel(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, normalize:bool=True):
         super().__init__()
         self.retina_net = retinanet_resnet50_fpn()
         self.output_formatter = RetinaToSentinel()
         self.nms = NMS()
+        self.normalize_outputs = normalize
 
     def forward(self, images:torch.Tensor, targets:Optional[List[Dict[str,torch.Tensor]]]=None ) -> torch.Tensor:
         preprocessed:List[torch.Tensor] = self.preprocess(images)
@@ -31,7 +32,10 @@ class Sentinel(torch.nn.Module):
             raw_outputs = [raw_outputs]
         tranformed_outputs: torch.Tensor = self.output_formatter.forward(raw_outputs)
         outputs: torch.Tensor = self.nms.forward(tranformed_outputs)
-        post_processed: torch.Tensor = self.normalize(outputs, resolutions)
+        if self.normalize_outputs:
+            post_processed: torch.Tensor = self.normalize(outputs, resolutions)
+        else: 
+            post_processed: torch.Tensor = outputs
 
 
         return post_processed

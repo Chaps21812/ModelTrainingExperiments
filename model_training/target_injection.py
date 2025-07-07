@@ -3,29 +3,28 @@ import torchvision
 from torchvision.models.detection import retinanet_resnet50_fpn, retinanet_resnet50_fpn_v2
 from torchvision.datasets import CocoDetection
 import torchvision.transforms.v2 as T
-from torch.utils.data import DataLoader, ConcatDataset
+from torch.utils.data import DataLoader
 import os
 import mlflow
 from evaluation.evaluation_metrics_deprecated import centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence
-from training_frameworks.evaluate_one_epoch import evaluate_stitching
-from training_frameworks.train_one_epoch import train_image_stitching
+from training_frameworks.evaluate_one_epoch import evaluate
+from training_frameworks.train_one_epoch import train_one_epoch
 
 
 if __name__ == "__main__":
 
     train_params = {
         "epochs": 250,
-        "batch_size": 8,
-        "lr": 1e-5, #sqrt(batch_size)*4e-4
+        "batch_size": 48,
+        "lr": 1e-4, #sqrt(batch_size)*4e-4
         "model_path": None,
-        "training_dir": ["/data/Sentinel_Datasets/Finalized_datasets/MixedSensors_MixtureC_Training/train", "/data/Sentinel_Datasets/Finalized_datasets/satsim_sats_dataset"],
-        "validation_dir": ["/data/Sentinel_Datasets/Finalized_datasets/MixedSensors_MixtureC_Training/val"],
-        "gpu": 6,
+        "training_dir": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04-Target-Injection_2k/train",
+        "validation_dir": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04-Target-Injection_2k/val",
+        "gpu": 2,
         "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence], 
         "momentum": 0.9,
         "weight_decay": 0.0005, 
-        "experiment_name": "Image_Stitching_Real+Simulated", 
-        "sub_batch_size": 36
+        "experiment_name": "Target_Injection_Only"
     }
 
     
@@ -36,27 +35,18 @@ if __name__ == "__main__":
     ])
 
     # Dataset paths
-    training_dir = train_params["training_dir"][0]
-    validation_dir = train_params["validation_dir"][0]
+    training_dir = train_params["training_dir"]
+    validation_dir = train_params["validation_dir"]
     base_dir = os.path.dirname(training_dir)
     models_dir = os.path.join(base_dir, "models", train_params["experiment_name"])
     os.makedirs(models_dir, exist_ok=True)
 
     # Load COCO-style dataset
-    training_sets = []
-    validation_sets = []
-    for training_set in train_params["training_dir"]:
-        temp_training = CocoDetection(root=training_set, annFile=os.path.join(training_set, "annotations", "annotations.json"), transforms=transform)
-        training_sets.append(temp_training)
-    for validation_set in train_params["validation_dir"]:
-        temp_validation = CocoDetection(root=validation_set, annFile=os.path.join(validation_set, "annotations", "annotations.json"), transforms=transform)
-        validation_sets.append(temp_validation)
-
-    training_set = ConcatDataset(training_sets)
-    validation_set = ConcatDataset(validation_sets)
-
+    training_set = CocoDetection(root=training_dir, annFile=os.path.join(training_dir, "annotations", "annotations.json"), transforms=transform)
+    validation_set = CocoDetection(root=validation_dir, annFile=os.path.join(validation_dir, "annotations", "annotations.json"), transforms=transform)
     training_loader = DataLoader(training_set, batch_size=train_params["batch_size"], shuffle=True, collate_fn=lambda x: (zip(*x)))
     validation_loader = DataLoader(validation_set, batch_size=train_params["batch_size"], shuffle=True, collate_fn=lambda x: (zip(*x)))
+
     # Load model
     model =  torchvision.models.detection.retinanet_resnet50_fpn()
     if train_params["model_path"] is not None:
@@ -77,9 +67,9 @@ if __name__ == "__main__":
         mlflow.log_params(train_params)
         model.train()
         for epoch in range(train_params["epochs"]):
-            losses = train_image_stitching(model, optimizer, training_loader, device, epoch, sub_batch_size=train_params["sub_batch_size"])
+            losses = train_one_epoch(model, optimizer, training_loader, device, epoch)
             mlflow.log_metrics(losses, epoch) 
-            results = evaluate_stitching(model, validation_dir, epoch, validation_loader, train_params["evaluation_metrics"], device,  sub_batch_size=train_params["sub_batch_size"])
+            results = evaluate(model, validation_dir, epoch, validation_loader, train_params["evaluation_metrics"], device)
             mlflow.log_metrics(results, epoch) 
             torch.save(model.state_dict(), os.path.join(models_dir,f"retinanet_weights_E{epoch}.pt"))
         mlflow.end_run()

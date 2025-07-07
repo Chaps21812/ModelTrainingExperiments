@@ -15,8 +15,6 @@ def _find_centroid(tensor: Tensor) -> Tensor:
     x = (tensor[:,2]+tensor[:,0])/2
     y = (tensor[:,3]+tensor[:,1])/2
     centroids = torch.stack((x,y), dim=1)
-    if centroids.ndim == 3:
-        print("bruh")
     return centroids
 
 def _calculate_true_positives(centroids:Tensor, targets:Tensor) -> tuple[Tensor, Tensor]:
@@ -82,14 +80,14 @@ def _calculate_nearest_box_loss(prediction_centroids:Tensor, target_centroids:Te
         return 0
 
     if prediction_centroids.ndim ==1:
-        prediction_centroids.unsqueeze(0)
+        prediction_centroids = prediction_centroids.unsqueeze(0)
     if target_centroids.ndim ==1:
-        target_centroids.unsqueeze(0)
+        target_centroids = target_centroids.unsqueeze(0)
 
     if prediction_centroids.ndim >= 3:
-        prediction_centroids.squeeze()
+        prediction_centroids = prediction_centroids.squeeze()
     if target_centroids.ndim >= 3:
-        target_centroids.squeeze()
+        target_centroids = target_centroids.squeeze()
 
     differences = prediction_centroids[:,None,:] - target_centroids[None, :,:]
     distances = torch.norm(differences, dim=2)
@@ -147,8 +145,6 @@ def compute_ap_from_iou(iou_matrix, pred_scores, iou_threshold=0.5):
     Returns:
         float: AP@0.5
     """
-    if iou_matrix.ndim==3:
-        print(iou_matrix.shape)
     N, M = iou_matrix.shape
     if N == 0:
         return 1.0 if M == 0 else 0.0
@@ -168,12 +164,8 @@ def compute_ap_from_iou(iou_matrix, pred_scores, iou_threshold=0.5):
             fps.append(1.0)
             continue
 
-        if iou_matrix.ndim==3:
-            print(iou_matrix.shape)
         ious = iou_matrix[i]
         max_iou, gt_idx = ious.max(0)
-        if iou_matrix.ndim==3:
-            print(iou_matrix.shape)
 
         # max_iou = max_iou[0].item() if max_iou.numel() > 1 else max_iou
         # matched_target =  matched_gt[gt_idx][0].item() if matched_gt[gt_idx].numel() > 1 else matched_gt[gt_idx]

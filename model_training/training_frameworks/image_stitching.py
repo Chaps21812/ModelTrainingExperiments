@@ -310,7 +310,7 @@ class ImageStitching(torch.nn.Module):
             overlap_x=20,
             overlap_y=20,
             device="cuda:0",
-        ):
+        ) -> tuple[list[torch.Tensor], list[dict[str,]]]:
             """Preprocessing of the image. Generating crops with overlapping.
 
             Args:
