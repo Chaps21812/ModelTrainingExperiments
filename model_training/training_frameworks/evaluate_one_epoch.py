@@ -21,7 +21,8 @@ def evaluate(model, dataset_directory:str, epoch:int, dataloader:DataLoader, eva
         targets = format_targets_bboxes(targets)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
-        outputs = model(images)
+        with torch.no_grad():
+            outputs = model(images)
         total_targets.extend([{k: v.detach().cpu() for k, v in t.items()} for t in targets])
         total_predictions.extend([{k: v.detach().cpu() for k, v in t.items()} for t in outputs])
 

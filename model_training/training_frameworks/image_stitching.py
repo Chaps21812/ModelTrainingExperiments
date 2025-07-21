@@ -302,7 +302,7 @@ class ImageStitching(torch.nn.Module):
         self.overlap_y = overlap_y
 
     #Cropping inspired from https://github.com/Koldim2001/YOLO-Patch-Based-Inference/blob/main/patched_yolo_infer/elements/CropElement.py#L5
-    def generate_crops(
+    def generate_crops(self,
             images:list, 
             targets:list=None, 
             shape_x: int=512,
@@ -434,7 +434,7 @@ class ImageStitching(torch.nn.Module):
                 torch.cuda.empty_cache() 
             return cropped_images, cropped_targets
 
-    def recombine_annotations(empty_image_info, predictions, device="cuda:0"):
+    def recombine_annotations(self, empty_image_info, predictions, device="cuda:0") -> list:
         image_compilation_dict = {}
         previous_bounds = []
         for target,prediction in zip(empty_image_info, predictions):

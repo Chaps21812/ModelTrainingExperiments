@@ -325,7 +325,7 @@ def centroid_accuracy(preds:list, targets:list) -> dict:
         FN += fn
     recall = TP/(TP+FN+1e-8)
     precision = TP/(TP+FP+1e-8)
-    f1 = precision*recall/(precision+recall+1e-8)
+    f1 = 2*precision*recall/(precision+recall+1e-8)
     return {"Anchor_F1": f1, "Anchor_Precision": precision, "Anchor_Recall ": recall}
 
 def calculate_centroid_difference(preds:torch.Tensor, targets:torch.Tensor) -> dict:
@@ -352,4 +352,4 @@ def calculate_centroid_difference(preds:torch.Tensor, targets:torch.Tensor) -> d
         target_box_surplus.append(num_pred_boxes-num_target_boxes)
         avg_distance.append(centroid_distances/max(1, num_pred_boxes))    
     
-    return {"Median_predicted_boxes": np.mean(num_boxes), "Median_total_distance": np.median(total_distance), "Median_centroid_distance": np.median(target_box_surplus), "Median_box_surplus": np.median(avg_distance),  "Mean_predicted_boxes": np.mean(num_boxes), "Mean_total_distance": np.mean(total_distance), "Mean_centroid_distance": np.mean(target_box_surplus), "Mean_box_surplus": np.mean(avg_distance)}
+    return {"Median_predicted_boxes": np.mean(num_boxes), "Median_centroid_distance": np.median(avg_distance),  "Mean_predicted_boxes": np.mean(num_boxes), "Mean_centroid_distance": np.mean(avg_distance)}

@@ -4,6 +4,7 @@ from torchvision.models.detection import retinanet_resnet50_fpn, retinanet_resne
 from torchvision.datasets import CocoDetection
 import torchvision.transforms.v2 as T
 from torch.utils.data import DataLoader, ConcatDataset
+from datetime import datetime
 import os
 import mlflow
 from evaluation.evaluation_metrics_deprecated import centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence
@@ -25,7 +26,8 @@ if __name__ == "__main__":
         "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence], 
         "momentum": 0.9,
         "weight_decay": 0.0005, 
-        "experiment_name": "All_Telescope_training"
+        "project": "SF_Sentinel",
+        "experiment_name": "AllSensors_MixtureC"
     }
 
     # Custom transforms (RetinaNet expects images and targets)
@@ -67,20 +69,38 @@ if __name__ == "__main__":
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.SGD(params, lr=train_params['lr'], momentum=train_params["momentum"], weight_decay=train_params["weight_decay"])
 
-    # Training Loop
-    mlflow.set_tracking_uri("http://localhost:5000")
-    mlflow.set_experiment(train_params["experiment_name"])
-    mlflow.end_run()
-    with mlflow.start_run():
-        mlflow.log_params(train_params)
-        model.train()
-        for epoch in range(train_params["epochs"]):
-            losses = train_one_epoch(model, optimizer, training_loader, device, epoch)
-            mlflow.log_metrics(losses, epoch) 
-            results = evaluate(model, validation_dir, epoch, validation_loader, train_params["evaluation_metrics"], device)
-            mlflow.log_metrics(results, epoch) 
-            torch.save(model.state_dict(), os.path.join(models_dir,f"retinanet_weights_E{epoch}.pt"))
-        mlflow.end_run()
+    try:
+        # Training Loop
+        mlflow.set_tracking_uri("http://localhost:5000")
+        mlflow.set_experiment(train_params["project"])
+        run_name = f"{train_params["experiment_name"]}_{datetime.now().strftime('%Y-%m-%d_%H:%M')}"
+        with mlflow.start_run(run_name=run_name):
+            mlflow.log_params(train_params)
+            model.train()
+            for epoch in range(train_params["epochs"]):
+                path = os.path.join(models_dir,f"retinanet_weights_E{epoch}.pt")
+                losses = train_one_epoch(model, optimizer, training_loader, device, epoch)
+                mlflow.log_metrics(losses, epoch) 
+                results = evaluate(model, validation_dir, epoch, validation_loader, train_params["evaluation_metrics"], device)
+                mlflow.log_metrics(results, epoch) 
+                torch.save(model.state_dict(), path)
+
+                mlflow.pytorch.log_model(model, artifact_path=path)
+                # Register it in the Model Registry
+                result = mlflow.register_model(
+                    model_uri=f"runs:/{mlflow.active_run().info.run_id}/{path}",
+                    name=f"retinanet_weights_E{epoch}.pt")
+
+            mlflow.end_run()
+    except Exception as e:
+        # Log the exception message as a tag or param
+        mlflow.log_param("run_status", "FAILED")
+        mlflow.log_param("error_type", type(e).__name__)
+        mlflow.log_param("error_message", str(e))
+        # Optionally re-raise if you want the program to crash
+        raise
+
+
 
 
 

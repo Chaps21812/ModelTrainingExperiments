@@ -3,7 +3,7 @@ import torch
 import torchvision
 from torchvision.datasets import CocoDetection
 import torchvision.transforms.v2 as T
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 import os
 import mlflow
 from tqdm import tqdm
@@ -122,7 +122,7 @@ def perform_timewise_benchmark(datasets:list, model_path:str, output_directory:s
     # model.load_state_dict(torch.load(model_path))
     # print(f"Loading Model: {model_path}")
     model = Sentinel(normalize=False)
-    model = model.load_original_model(model_path)
+    model.load_original_model(model_path)
     model.to(device)
 
     mlflow.set_tracking_uri("http://localhost:5000")
@@ -157,9 +157,10 @@ if __name__ == "__main__":
     LMNT02model = "/data/Sentinel_Datasets/Best_models/LMNT02_Base_model.pt"
     RME04model = "/data/Sentinel_Datasets/Best_models/RME04_Base_model.pt"
     title = "Performance_over_time_LMNT01_on_LMNT02_data"
-    output_dir = os.path.join("/data/Sentinel_Datasets/Experiments", title)
+    output_dir = os.path.join("/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments", title)
     metrics = [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference]
+    device_no = 3
 
-    perform_timewise_benchmark(LMNT02_Datasets, LMNT01model, output_dir, title, metrics, device_no=3)
-    perform_cumulative_evaluation(RME04_Datasets, RME04model, output_dir, title, metrics, device_no=5)
+    perform_timewise_benchmark(LMNT02_Datasets, LMNT01model, output_dir, title, metrics, device_no=device_no)
+    perform_cumulative_evaluation(RME04_Datasets, RME04model, output_dir, title, metrics, device_no=device_no)
 
