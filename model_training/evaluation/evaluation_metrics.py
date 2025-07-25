@@ -104,7 +104,52 @@ def _calculate_nearest_box_loss(prediction_centroids:Tensor, target_centroids:Te
     nearest_distances = distances[torch.arange(len(prediction_centroids)), nearest_indicies]
     return torch.sum(nearest_distances).item()
 
-def calculate_ap_at_threshold(iou_matrix, iou_threshold):
+def _centroid_metric(pred, tgt, H=None, W=None, unmatched_lambda=1.0, eps=1e-6):
+    """
+    pred, tgt: [N, 2] tensors (x, y) in pixels or normalized coordinates.
+    If in pixels, pass H, W to set the unmatched cost. If normalized, leave H/W None.
+    Returns a normalized loss where 0 is perfect, 1 is ~worst-case (given our normalization).
+    """
+    n_p, n_g = len(pred), len(tgt)
+
+    # Handle trivial cases
+    if n_p == 0 and n_g == 0:
+        return 0.0
+
+    # Max possible distance
+    if H is not None and W is not None:
+        c_max = (H**2 + W**2) ** 0.5
+    else:
+        # assume coords in [0,1]
+        c_max = 2.0 ** 0.5
+
+    if n_p == 0 or n_g == 0:
+        # All boxes are unmatched; penalize each one
+        unmatched = max(n_p, n_g)
+        loss = unmatched_lambda * unmatched * c_max
+        return loss / (unmatched * c_max + eps)  # → 1.0
+
+    # Pairwise distances
+    d = torch.cdist(pred, tgt)  # [n_p, n_g]
+
+    # Chamfer-like symmetric sum of nearest distances
+    pred_to_tgt = d.min(dim=1).values  # [n_p]
+    tgt_to_pred = d.min(dim=0).values  # [n_g]
+
+    chamfer = pred_to_tgt.sum() + tgt_to_pred.sum()
+
+    # Count mismatch cost (how many we "couldn't" match 1-1)
+    unmatched = abs(n_p - n_g)
+    count_pen = unmatched_lambda * unmatched * c_max
+
+    # Normalize to something that lives roughly in [0, 1]
+    # denom = (n_p + n_g) * c_max + eps
+    total_count = n_p + n_g
+
+    avg_distance = (chamfer + count_pen) / (total_count + eps)
+    return avg_distance.item()
+
+def calculate_ap_at_threshold(iou_matrix, iou_threshold, image_height=None):
     """
     Calculates precision and recall at a given IoU threshold, then returns AP.
 
@@ -141,7 +186,7 @@ def calculate_ap_at_threshold(iou_matrix, iou_threshold):
 
     return precision, recall, ap
 
-def compute_ap_from_iou(iou_matrix, pred_scores, iou_threshold=0.5):
+def compute_ap_from_iou(iou_matrix, pred_scores, iou_threshold=0.5, image_height=None):
     """
     Compute AP@0.5 using a precomputed IoU matrix and prediction scores.
 
@@ -201,7 +246,7 @@ def compute_ap_from_iou(iou_matrix, pred_scores, iou_threshold=0.5):
     ap = torch.trapz(precisions, recalls).item()
     return ap
 
-def compute_ar_from_iou(iou_matrix, pred_scores, iou_threshold=0.5):
+def compute_ar_from_iou(iou_matrix, pred_scores, iou_threshold=0.5, image_height=None):
     """
     Compute AR@0.5 using greedy matching sorted by prediction scores.
 
@@ -241,7 +286,7 @@ def compute_ar_from_iou(iou_matrix, pred_scores, iou_threshold=0.5):
     recall = TP / (N_gt + 1e-8)
     return recall
 
-def calculate_bbox_metrics(preds: list,targets: list) -> dict:
+def calculate_bbox_metrics(preds: list,targets: list, image_height=None) -> dict:
     """
     Calculate bounding box metrics such as average precision, average recall and IOU score
 
@@ -298,7 +343,7 @@ def calculate_bbox_metrics(preds: list,targets: list) -> dict:
 
     return {"AP50": ap50, "AP75": ap75, "AR50":ar50, "AR75":ar75 }
 
-def centroid_accuracy(preds:list, targets:list) -> dict:
+def centroid_accuracy(preds:list, targets:list, image_height=None) -> dict:
     """
     Calculates the true Positive, false positives, F1 scores for dictionaries of predictions and Outputs.
 
@@ -328,7 +373,7 @@ def centroid_accuracy(preds:list, targets:list) -> dict:
     f1 = 2*precision*recall/(precision+recall+1e-8)
     return {"Anchor_F1": f1, "Anchor_Precision": precision, "Anchor_Recall ": recall}
 
-def calculate_centroid_difference(preds:torch.Tensor, targets:torch.Tensor) -> dict:
+def calculate_centroid_difference(preds:torch.Tensor, targets:torch.Tensor, image_height=None) -> dict:
     num_boxes = []
     total_distance = []
     avg_distance = []
@@ -343,7 +388,10 @@ def calculate_centroid_difference(preds:torch.Tensor, targets:torch.Tensor) -> d
         predicted_centroids = _find_centroid(processed_predictions[:4,:])
         target_centroids = _find_centroid(processed_targets[:4,:])
 
-        centroid_distances = _calculate_nearest_box_loss(predicted_centroids, target_centroids)
+        if image_height is None:
+            centroid_distances = _calculate_nearest_box_loss(predicted_centroids, target_centroids)
+        else:
+            centroid_distances = _centroid_metric(predicted_centroids, target_centroids, H=image_height[1], W=image_height[0])
         num_pred_boxes = len(predicted_centroids)
         num_target_boxes = len(target_centroids)
 

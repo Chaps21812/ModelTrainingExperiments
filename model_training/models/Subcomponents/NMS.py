@@ -48,7 +48,7 @@ class NMS(torch.nn.Module):
             assert best_box.ndim == 2
     
             ious = self._calculate_IOU(predictions, best_box)
-            keep_scores = (ious<IOU_Threshold).transpose(0,1).squeeze()
+            keep_scores = (ious<IOU_Threshold).transpose(0,1).squeeze() #Investigate the math here, > seems to do better for some reason
             keep_scores[sorted_indicies[index]] = True
             non_zero_scores = (predictions[4,:]>0)
             keep_scores = keep_scores & non_zero_scores

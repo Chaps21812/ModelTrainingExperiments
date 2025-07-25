@@ -14,12 +14,16 @@ def evaluate(model, dataset_directory:str, epoch:int, dataloader:DataLoader, eva
     total_targets= []
     total_predictions = []
     metrics = {}
+    H=1
+    W=1
 
     model.eval()
     for images, targets in tqdm(dataloader, desc="Evaluating"):
         images = list(img.to(device) for img in images)
         targets = format_targets_bboxes(targets)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+        H = images[0].shape[1]
+        W = images[0].shape[2]
 
         with torch.no_grad():
             outputs = model(images)
@@ -31,7 +35,7 @@ def evaluate(model, dataset_directory:str, epoch:int, dataloader:DataLoader, eva
             plot_prediction_bbox_annotation(images, outputs, targets, dataset_directory, epoch)
 
     for metric in evaluation_metrics:
-        results = metric(total_predictions, total_targets)
+        results = metric(total_predictions, total_targets, image_height=(W,H))
         metrics.update(results)
     return metrics
 
@@ -39,12 +43,16 @@ def evaluate_stitching(model, dataset_directory:str, epoch:int, dataloader:DataL
     total_targets= []
     total_predictions = []
     metrics = {}
+    H=1
+    W=1
 
     model.eval()
     for images, targets in tqdm(dataloader, desc="Evaluating"):
         images = list(img.to(device) for img in images)
         targets = format_targets_bboxes(targets)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+        H = images[0].shape[1]
+        W = images[0].shape[2]
 
         images_cropped_predicted, empty_targets = generate_crops(images, device=device)
 
@@ -68,7 +76,7 @@ def evaluate_stitching(model, dataset_directory:str, epoch:int, dataloader:DataL
             plot_prediction_bbox_annotation(images, outputs, targets, dataset_directory, epoch)
 
     for metric in evaluation_metrics:
-        results = metric(total_predictions, total_targets)
+        results = metric(total_predictions, total_targets, image_height=(W,H))
         metrics.update(results)
     return metrics
         

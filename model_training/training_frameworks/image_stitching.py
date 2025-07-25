@@ -425,7 +425,7 @@ class ImageStitching(torch.nn.Module):
                         image_nnid +=1
 
                         cropped_targets.append(partition_dict)
-                        cropped_images.append(cropped_image.to(device))
+                        cropped_images.append(standardized_image.to(device))
                         cropped_image = cropped_image.cpu()
                         del cropped_image
                         torch.cuda.empty_cache() 
