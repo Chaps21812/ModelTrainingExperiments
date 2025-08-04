@@ -18,15 +18,15 @@ if __name__ == "__main__":
         "epochs": 250,
         "batch_size": 42,
         "lr": 1e-4, #sqrt(batch_size)*4e-4
-        "model_path": None,
-        "training_dir": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/SatsimMCTrain/train",
-        "validation_dir": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/SatsimMCTrain/val",
+        "model_path": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/SatsimMCTrain/models/Satsim/retinanet_weights_E76.pt",
+        "training_dir": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_LMNT01_train/train",
+        "validation_dir": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_LMNT01_train/val",
         "gpu": 7,
         "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence], 
         "momentum": 0.9,
         "weight_decay": 0.0005, 
-        "project": "Panoptic_Sentinel",
-        "experiment_name": "Satsim"
+        "project": "Panoptic_SentinelV2",
+        "experiment_name": "FineTuned"
     }
 
     # train_params = {

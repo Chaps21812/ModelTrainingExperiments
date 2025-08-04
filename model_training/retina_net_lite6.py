@@ -19,14 +19,14 @@ if __name__ == "__main__":
         "batch_size": 42,
         "lr": 1e-4, #sqrt(batch_size)*4e-4
         "model_path": None,
-        "training_dir": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_L1R4_train/train",
-        "validation_dir": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_L1R4_train/val",
+        "training_dir": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_AllData_train/train",
+        "validation_dir": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_AllData_train/val",
         "gpu": 6,
         "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence], 
         "momentum": 0.9,
         "weight_decay": 0.0005, 
-        "project": "Panoptic_Sentinel",
-        "experiment_name": "L1R4"
+        "project": "Panoptic_SentinelV2",
+        "experiment_name": "AllData_2"
     }
 
     # train_params = {

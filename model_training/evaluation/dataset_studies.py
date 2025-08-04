@@ -108,12 +108,14 @@ class Dataset_study():
                 f.write(f"{key}: {value}\n")
 
 class CompiledExperiments():
-    def __init__(self, paths:list, model_names:list, datasets:list, save_path:str):
+    def __init__(self, paths:list, color_legend:list, shape_legend:list, save_path:str, save_type:str="pdf"):
         self.paths = paths
-        self.model_names = model_names
-        self.datasets = datasets
+        self.color_legend = color_legend
+        self.shape_legend = shape_legend
         self.dataframes = []
         self.save_path = save_path
+        os.makedirs(self.save_path, exist_ok=True)
+        self.save_type = save_type
         self.basename = os.path.basename(save_path)
 
         self.matplotlib_colors  = [
@@ -132,9 +134,25 @@ class CompiledExperiments():
 
         # self.matplotlib_colors = ['red','blue','green','cyan','magenta','yellow','black','orange','purple','darkgreen']
         self.matplotlib_markers = ['o',  's',  '^',  '<',  '>',  'D',  '*',  'x', '+']
+        self.matplotlib_markers = ['s',  '^',  '<',  '>',  'D',  '*',  'x', '+']
+        self.matplotlib_markers = ['^',  '0<',  '>',  'D',  '*',  'x', '+']
 
-        self.model_set = list(set(self.model_names))
-        self.dataset_set = list(set(self.datasets))
+
+        temp_dict = {}
+        color_list = []
+        for color in self.color_legend:
+            if not color in temp_dict:
+                color_list.append(color)
+                temp_dict[color] =  1
+        temp_dict = {}
+        shape_list = []
+        for shape in self.shape_legend:
+            if not shape in temp_dict:
+                shape_list.append(shape)
+                temp_dict[shape] =  1
+
+        self.color_list = color_list
+        self.shape_list = shape_list
 
 
         for file_path in paths:
@@ -147,6 +165,62 @@ class CompiledExperiments():
             study = study.load(os.path.join(file_path, filename))
             self.dataframes.append(study.dataframe)
 
+    def combine_metric_plots(self, metrics:list):
+        plt.clf() 
+        plt.close('all')
+        plt.figure(figsize=(7,6)) 
+        save_path = os.path.join(self.save_path, f"combined_metrics.{self.save_type}")
+        used_shapes = {}
+        used_colors = {}
+
+        large_range= False
+
+        min_value = 1
+
+        for shape_index, df in enumerate(self.dataframes):
+            for color_index, metric in enumerate(metrics):
+                color = self.matplotlib_colors[color_index]
+                shape = self.matplotlib_markers[shape_index]
+                
+                df = df.sort_values(by="date")
+                df[metric]
+                try: df[metric]
+                except KeyError: continue
+                if metric != "date":
+                    if df[metric].max() >1:
+                        large_range=True
+                bruh = self.color_legend[shape_index]
+                if "Panoptic" in self.color_legend[shape_index] and not 'F1' in metric:
+                    continue
+
+                min_value = min(min_value, df[metric].min() )
+                days_since_start = (df["date"]-df["date"].min()).dt.days
+                plt.plot(days_since_start, df[metric], marker=shape, linestyle="-", color=color, markersize=8, markerfacecolor=color, markeredgecolor='none', alpha=.75)
+
+                used_colors[color_index] = Line2D([-1], [-1], color=color, lw=1, label=metric)
+                used_shapes[shape_index] = Line2D([-1], [-1], marker=shape, color='black', linestyle='None', label=self.color_legend[shape_index])
+    
+        # Draw both legends separately
+        key = []
+        for k,value in used_colors.items():
+            key.append(value)
+        for k,value in used_shapes.items():
+            key.append(value)
+        plt.legend(handles=key, loc='lower right')
+
+        if large_range:
+            plt.ylim(bottom=0)
+        else:
+            plt.ylim(bottom=min_value, top=1)
+        # plt.xticks([])
+        # plt.xlim(bottom=0)
+        # plt.xticks(df["date"].tolist(), rotation=45)
+        plt.xlabel("Days Elapsed Since Training")
+        plt.ylabel(f"Metric")
+        # plt.title(f"{metric.replace("_"," ")}")
+        plt.savefig(save_path, dpi=800, bbox_inches='tight')
+        plt.close()
+
     def plot_metrics_over_time(self):
         for key in self.dataframes[0].columns:
             self.plot_metric(key)
@@ -154,22 +228,24 @@ class CompiledExperiments():
     def plot_metric(self, metric:str):
         plt.clf() 
         plt.close('all')
-        plt.figure(figsize=(7,6)) 
-        save_path = os.path.join(self.save_path, f"{metric}.pdf")
+        plt.figure(figsize=(5,4,)) 
+        save_path = os.path.join(self.save_path, f"{metric}.{self.save_type}")
         used_shapes = {}
         used_colors = {}
 
         large_range= False
 
         for index, df in enumerate(self.dataframes):
-            color_label = self.model_names[index]
-            shape_label = self.datasets[index]
-            color_index = self.model_set.index(color_label)
-            shape_index = self.dataset_set.index(shape_label)
+            color_label = self.color_legend[index]
+            shape_label = self.shape_legend[index]
+            color_index = self.color_list.index(color_label)
+            shape_index = self.shape_list.index(shape_label)
             color = self.matplotlib_colors[color_index]
             shape = self.matplotlib_markers[shape_index]
             
             df = df.sort_values(by="date")
+            try: df[metric]
+            except KeyError: continue
             if metric != "date":
                 if df[metric].max() >1:
                     large_range=True
@@ -187,7 +263,7 @@ class CompiledExperiments():
             key.append(value)
         for k,value in used_shapes.items():
             key.append(value)
-        plt.legend(handles=key, loc='upper right')
+        plt.legend(handles=key, loc='lower right')
 
         if large_range:
             plt.ylim(bottom=0)
@@ -205,8 +281,8 @@ class CompiledExperiments():
     def print_metric_avgs(self):
         for index, df in enumerate(self.dataframes):
             print()
-            print(f"Model: {self.model_names[index]}")
-            print(f"Dataset: {self.datasets[index]}")
+            print(f"Model: {self.color_legend[index]}")
+            print(f"Dataset: {self.shape_legend[index]}")
             self.print_metric_avg(df)
             
     def print_metric_avg(self, dataframe:pd.DataFrame):

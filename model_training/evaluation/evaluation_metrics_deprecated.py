@@ -273,7 +273,7 @@ def compute_ar_from_iou(iou_matrix, pred_scores, iou_threshold=0.5):
     recall = TP / (N_gt + 1e-8)
     return recall
 
-def calculate_bbox_metrics(preds: list,targets: list) -> dict:
+def calculate_bbox_metrics(preds: list,targets: list, image_height=None) -> dict:
     """
     Calculate bounding box metrics such as average precision, average recall and IOU score
 
@@ -324,7 +324,7 @@ def calculate_bbox_metrics(preds: list,targets: list) -> dict:
 
     return {"AP50": ap50, "AP75": ap75, "AR50":ar50, "AR75":ar75 }
 
-def centroid_accuracy(preds:list, targets:list) -> dict:
+def centroid_accuracy(preds:list, targets:list, image_height=None) -> dict:
     """
     Calculates the true Positive, false positives, F1 scores for dictionaries of predictions and Outputs.
 
@@ -371,7 +371,7 @@ def calculate_centroid_difference(preds:list, targets:list, image_height=None) -
         target_box_surplus.append(num_pred_boxes-num_target_boxes)
         avg_distance.append(centroid_distances/max(1, num_pred_boxes))    
     
-    return {"Median_predicted_boxes": np.mean(num_boxes),  "Median_centroid_distance": np.median(avg_distance),   "Mean_predicted_boxes": np.mean(num_boxes),  "Mean_centroid_distance": np.mean(avg_distance)}
+    return {"Median_predicted_boxes": np.median(num_boxes),  "Median_centroid_distance": np.median(avg_distance),   "Mean_predicted_boxes": np.mean(num_boxes),  "Mean_centroid_distance": np.mean(avg_distance)}
 
 def calculate_centroid_difference_90_confidence(preds:list, targets:list, confidence_threshold=.90, image_height=None) -> dict:
     num_boxes = []
@@ -415,7 +415,7 @@ def calculate_centroid_difference_90_confidence(preds:list, targets:list, confid
         avg_distance.append(256)    
 
 
-    return {"Median_predicted_boxes_90c": np.mean(num_boxes), "Median_centroid_distance_90c": np.median(avg_distance), "Mean_predicted_boxes_90c": np.mean(num_boxes), "Mean_centroid_distance_90c": np.mean(avg_distance)}
+    return {"Median_predicted_boxes_90c": np.median(num_boxes), "Median_centroid_distance_90c": np.median(avg_distance), "Mean_predicted_boxes_90c": np.mean(num_boxes), "Mean_centroid_distance_90c": np.mean(avg_distance)}
 
 def calculate_centroid_difference_10_confidence(preds:list, targets:list, confidence_threshold=.10, image_height=None) -> dict:
     num_boxes = []
@@ -461,5 +461,5 @@ def calculate_centroid_difference_10_confidence(preds:list, targets:list, confid
         avg_distance.append(256)    
 
 
-    return {"Median_predicted_boxes_10c": np.mean(num_boxes), "Median_centroid_distance_10c": np.median(avg_distance),   "Mean_predicted_boxes_10c": np.mean(num_boxes), "Mean_centroid_distance_10c": np.mean(avg_distance), }
+    return {"Median_predicted_boxes_10c": np.median(num_boxes), "Median_centroid_distance_10c": np.median(avg_distance),   "Mean_predicted_boxes_10c": np.mean(num_boxes), "Mean_centroid_distance_10c": np.mean(avg_distance), }
 

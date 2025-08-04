@@ -400,4 +400,4 @@ def calculate_centroid_difference(preds:torch.Tensor, targets:torch.Tensor, imag
         target_box_surplus.append(num_pred_boxes-num_target_boxes)
         avg_distance.append(centroid_distances/max(1, num_pred_boxes))    
     
-    return {"Median_predicted_boxes": np.mean(num_boxes), "Median_centroid_distance": np.median(avg_distance),  "Mean_predicted_boxes": np.mean(num_boxes), "Mean_centroid_distance": np.mean(avg_distance)}
+    return {"Median_predicted_boxes": np.median(num_boxes), "Median_centroid_distance": np.median(avg_distance),  "Mean_predicted_boxes": np.mean(num_boxes), "Mean_centroid_distance": np.mean(avg_distance)}

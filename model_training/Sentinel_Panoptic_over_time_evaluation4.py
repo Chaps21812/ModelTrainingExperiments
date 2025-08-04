@@ -4,16 +4,18 @@ import torchvision
 from torchvision.datasets import CocoDetection
 import torchvision.transforms.v2 as T
 from torch.utils.data import DataLoader, ConcatDataset
-from datetime import datetime
 import os
 import mlflow
 from tqdm import tqdm
+from models.Sentinel_Models.Sentinel_Retina_Net_Stitch import Sentinel_Panoptic
 from models.Sentinel_Models.Sentinel_Retina_Net import Sentinel
 from evaluation.evaluation_metrics import centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference
 from evaluation.plot_predictions import plot_prediction_bbox, plot_prediction_bbox_annotation
 from evaluation.dataset_studies import Dataset_study
 from training_frameworks.format_targets import format_targets_bboxes
 import torch.nn.functional as F
+from datetime import datetime
+
 
 def evaluate_over_time(model, dataset_directory:str, epoch:int, dataloader:DataLoader, evaluation_metrics:list, device:str, plot:bool=False):
     total_targets= []
@@ -62,7 +64,7 @@ def evaluate_over_time(model, dataset_directory:str, epoch:int, dataloader:DataL
         metrics.update(results)
     return metrics
 
-def perform_timewise_benchmark(datasets:list, model_path:str, output_directory:str, experiment_title, evaluation_metrics, device_no=5, database=None):
+def perform_timewise_benchmark(datasets:list, model_path:str, output_directory:str, experiment_title, evaluation_metrics, device_no=5, database=None, batchsize=10):
     if database is None:
         database = Dataset_study(output_directory, datasets, experiment_title)
     else:
@@ -78,11 +80,11 @@ def perform_timewise_benchmark(datasets:list, model_path:str, output_directory:s
     # model = torchvision.models.detection.retinanet_resnet50_fpn()
     # model.load_state_dict(torch.load(model_path))
     # print(f"Loading Model: {model_path}")
-    model = Sentinel(normalize=False)
+    model = Sentinel_Panoptic(normalize=False, sub_batch_size=batchsize)
+    # model = Sentinel(normalize=False)
     model.load_original_model(model_path)
     model.to(device)
     model.eval()
-
 
 
     mlflow.log_param("Model", model_path)
@@ -91,7 +93,7 @@ def perform_timewise_benchmark(datasets:list, model_path:str, output_directory:s
     for index, path in tqdm(enumerate(database)):
         # Load COCO-style dataset
         validation_set = CocoDetection(root=path, annFile=os.path.join(path, "annotations", "annotations.json"), transforms=transform)
-        validation_loader = DataLoader(validation_set, batch_size=20, shuffle=True, collate_fn=lambda x: (zip(*x)))
+        validation_loader = DataLoader(validation_set, batch_size=16, shuffle=True, collate_fn=lambda x: (zip(*x)))
         results = evaluate_over_time(model, path, index,validation_loader, evaluation_metrics, device)
         mlflow.log_metrics(results, index)
         results["date"] = database.path_to_date[path]
@@ -102,7 +104,7 @@ def perform_timewise_benchmark(datasets:list, model_path:str, output_directory:s
     database.plot_all_metrics()
     return database
 
-def perform_cumulative_evaluation(datasets:list, model_path:str, output_directory:str, experiment_title, evaluation_metrics, device_no=5, database=None):
+def perform_cumulative_evaluation(datasets:list, model_path:str, output_directory:str, experiment_title, evaluation_metrics, device_no=5, database=None, batchsize=10):
     if database is None:
         database = Dataset_study(output_directory, datasets, experiment_title)
     else:
@@ -118,7 +120,7 @@ def perform_cumulative_evaluation(datasets:list, model_path:str, output_director
     # model = torchvision.models.detection.retinanet_resnet50_fpn()
     # model.load_state_dict(torch.load(model_path))
     # print(f"Loading Model: {model_path}")
-    model = Sentinel(normalize=False)
+    model = Sentinel_Panoptic(normalize=False, sub_batch_size=batchsize)
     model.load_original_model(model_path)
     model.to(device)
     model.eval()
@@ -130,7 +132,10 @@ def perform_cumulative_evaluation(datasets:list, model_path:str, output_director
         validation_sets.append(temp_validation)
 
     validation_set = ConcatDataset(validation_sets)
-    validation_loader = DataLoader(validation_set, batch_size=20, shuffle=True, collate_fn=lambda x: (zip(*x)))
+    validation_loader = DataLoader(validation_set, batch_size=16, shuffle=True, collate_fn=lambda x: (zip(*x)))
+
+    mlflow.log_param("Model", model_path)
+    mlflow.log_param("Dataset", datasets)
 
     results = evaluate_over_time(model, "", 0,validation_loader, evaluation_metrics, device)
     database.plot_all_metrics()
@@ -148,26 +153,39 @@ if __name__ == "__main__":
     RME04_Evaluation_set = ["/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-04_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-05_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-06_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-07_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-08_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-09_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-11_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-12_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-13_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-15_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-28_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-07-09_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-07-19_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2025-06-04_Channel_Mixture_C"]
     RME04_Evaluation_set_No_Future = ["/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-04_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-05_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-06_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-07_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-08_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-09_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-11_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-12_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-13_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-15_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-06-28_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-07-09_Channel_Mixture_C", "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/RME04Sat-2024-07-19_Channel_Mixture_C"]
 
+
     #Pull data from these variables
-    LMNT01model = "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Best_models/LMNT01_E249.pt"
-    LMNT02model = "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Best_models/LMNT02_E180.pt"
-    RME04model = "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Best_models/RME04_E73.pt"
+    # Panoptic_model = "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Best_models/PanopticL1E49.pt"
     datasets = [RME04_Evaluation_set_No_Future,RME04_Evaluation_set, LNT02_Evaluation_set, LMNT01_Evaluation_set]
 
     #Adjust this code only
-    run_name = f"L2_Model_On_L2_Data_{datetime.now().strftime('%Y-%m-%d_%H:%M')}"
-    model = LMNT02model
+    run_name = f"PanopticL1_on_L2_Data"
+    Panoptic_model = "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_LMNT01_train/models/L1/retinanet_weights_E110.pt"
     dataset = LNT02_Evaluation_set
-    device_no = 7
+    device_no = 5
+    batchsize = 120
     #Adjust this code only
 
+
+
+    model = Panoptic_model
     metrics = [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference]
-    mlflow.set_tracking_uri("http://localhost:5000")
-    mlflow.set_experiment("SF Sentinel Over Time")
-    mlflow.end_run()
-    with mlflow.start_run(run_name=run_name):
-        output_dir = os.path.join("/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments", run_name)
-        database = perform_timewise_benchmark(dataset, model, output_dir, run_name, metrics, device_no=device_no)
-        database = perform_cumulative_evaluation(dataset, model, output_dir, run_name, metrics, device_no=device_no, database=database)
-    mlflow.end_run()
+    try:
+        # Training Loop
+        mlflow.set_tracking_uri("http://localhost:5000")
+        mlflow.set_experiment("Panoptic Sentinel Over Time")
+        run_name = f"{run_name}_{datetime.now().strftime('%Y-%m-%d_%H:%M')}"
+        with mlflow.start_run(run_name=run_name):
+            output_dir = os.path.join("/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments", run_name)
+            database = perform_timewise_benchmark(dataset, model, output_dir, run_name, metrics, device_no=device_no, batchsize=batchsize)
+            database = perform_cumulative_evaluation(dataset, model, output_dir, run_name, metrics, device_no=device_no, database=database, batchsize=batchsize)
+        mlflow.end_run()
+    except Exception as e:
+        # Log the exception message as a tag or param
+        mlflow.log_param("run_status", "FAILED")
+        mlflow.log_param("error_type", type(e).__name__)
+        mlflow.log_param("error_message", str(e))
+        # Optionally re-raise if you want the program to crash
+        raise
+
 

@@ -25,8 +25,8 @@ if __name__ == "__main__":
         "evaluation_metrics": [centroid_accuracy, calculate_bbox_metrics, calculate_centroid_difference, calculate_centroid_difference_10_confidence, calculate_centroid_difference_90_confidence], 
         "momentum": 0.9,
         "weight_decay": 0.0005, 
-        "project": "Panoptic_Sentinel",
-        "experiment_name": "L1Sim"
+        "project": "Panoptic_SentinelV2",
+        "experiment_name": "Mixed_L1Sim"
     }
 
     # train_params = {

@@ -1,4 +1,5 @@
 import torch
+from typing import List
 
 #Images is a list of tensors
 #Targets is a list of dictionaries, with image_id, boxes: tensor[labels], and labels: tensor[N_boxes, 4]
@@ -303,14 +304,14 @@ class ImageStitching(torch.nn.Module):
 
     #Cropping inspired from https://github.com/Koldim2001/YOLO-Patch-Based-Inference/blob/main/patched_yolo_infer/elements/CropElement.py#L5
     def generate_crops(self,
-            images:list, 
-            targets:list=None, 
+            images:List[torch.Tensor], 
+            targets:List[dict[str,torch.Tensor]]=None, 
             shape_x: int=512,
             shape_y: int=512,
             overlap_x=20,
             overlap_y=20,
             device="cuda:0",
-        ) -> tuple[list[torch.Tensor], list[dict[str,]]]:
+        ) -> tuple[list[torch.Tensor], list[dict[str,torch.Tensor]]]:
             """Preprocessing of the image. Generating crops with overlapping.
 
             Args:
