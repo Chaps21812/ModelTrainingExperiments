@@ -1,8 +1,33 @@
 from torch.types import Tensor
 import numpy as np
 import torch
+from scipy.optimize import linear_sum_assignment
 
 def _find_centroid(tensor: Tensor) -> Tensor:
+    """
+    Find the centroid of the bounding box given XC, YC, W, H.Tensor must be in shape [5,N].
+
+    Args:
+        tensor (tensor): tensor bounding box [XC, YC, W, H], shape [5,N]
+
+    Returns:
+        centroids (tensor): Torch tensor of centroids
+    """
+    x = tensor[0,:]
+    y = tensor[1,:]
+    confidence = tensor[4,:]
+    if x.ndim == 1:
+        x.unsqueeze(0)
+    if y.ndim == 1:
+        y.unsqueeze(0)
+    if x.ndim == 3:
+        x.squeeze()
+    if y.ndim == 3:
+        y.squeeze()
+    centroids = torch.stack((x,y,confidence), dim=0).transpose(1,0)
+    return centroids
+
+def _find_centroid_no_confidence(tensor: Tensor) -> Tensor:
     """
     Find the centroid of the bounding box given XC, YC, W, H.Tensor must be in shape [5,N].
 
@@ -25,6 +50,38 @@ def _find_centroid(tensor: Tensor) -> Tensor:
     centroids = torch.stack((x,y), dim=0).transpose(1,0)
     return centroids
 
+def _calculate_l2_true_positives(centroids:Tensor, targets:Tensor, tfit:float) -> tuple[Tensor, Tensor]:
+    """
+    Find the centroid of the bounding box given XC, YC, W, H.Tensor must be in shape [N,4].
+
+    Args:
+        tensor (tensor): tensor bounding box [XC, YC, W, H], shape [N,4]
+
+    Returns:
+        centroids (tensor): List of files present in the train test split
+    """
+
+    predicted_x = centroids[:,0].unsqueeze(1)
+    predicted_y = centroids[:,1].unsqueeze(1) #[P,n]
+
+    target_x_centroid = targets[:,0].unsqueeze(1).transpose(1,0) #[m,T]
+    target_y_centroid = targets[:,1].unsqueeze(1).transpose(1,0)
+
+    dx = predicted_x-target_x_centroid
+    dy = predicted_y-target_y_centroid
+    l2 = torch.sqrt(dx**2 + dy**2)
+
+    l2_distances = l2.cpu().numpy()
+    pred_indices, target_indices = linear_sum_assignment(l2_distances)
+    matched_distances = l2_distances[pred_indices, target_indices]
+    valid_matches = matched_distances < tfit
+
+    TP = valid_matches.sum()
+    FP = l2_distances.shape[0] - TP
+    FN = l2_distances.shape[1] - TP
+
+    return TP, FP, FN
+
 def _calculate_true_positives(centroids:Tensor, targets:Tensor) -> tuple[Tensor, Tensor]:
     """
     Find the centroid of the bounding box given XC, YC, W, H.Tensor must be in shape [N,4].
@@ -35,13 +92,27 @@ def _calculate_true_positives(centroids:Tensor, targets:Tensor) -> tuple[Tensor,
     Returns:
         centroids (tensor): List of files present in the train test split
     """
-    predicted_x = centroids[:,0].unsqueeze(1)
-    predicted_y = centroids[:,1].unsqueeze(1)
 
-    target_x_centroid = targets[0,:].unsqueeze(0)
+    if len(targets.transpose(1,0)) ==0 and len(centroids) ==0:
+        return 0,0,0
+    if len(targets.transpose(1,0)) != 0 and len(centroids) ==0:
+        return 0,0,len(targets.transpose(1,0))
+    if len(targets.transpose(1,0)) == 0 and len(centroids) !=0:
+        return 0,len(centroids),0
+    
+    if len(centroids) > 1:
+        print("more predictions")
+    if len(targets.transpose(1,0)) > 1:
+        print("more targets")
+
+    predicted_x = centroids[:,0].unsqueeze(1)
+    predicted_y = centroids[:,1].unsqueeze(1) #[P,1]
+
+    target_x_centroid = targets[0,:].unsqueeze(0) #[1,T]
     target_y_centroid = targets[1,:].unsqueeze(0)
     target_width = targets[2,:].unsqueeze(0)
     target_height = targets[3,:].unsqueeze(0)
+    radius = (target_width+target_height)/2/2
 
     inside_x = (predicted_x >= target_x_centroid - target_width/2) & (predicted_x <= target_x_centroid + target_width/2)
     inside_y = (predicted_y >= target_y_centroid - target_height/2) & (predicted_y <= target_y_centroid + target_height/2)
@@ -343,6 +414,96 @@ def calculate_bbox_metrics(preds: list,targets: list, image_height=None) -> dict
 
     return {"AP50": ap50, "AP75": ap75, "AR50":ar50, "AR75":ar75 }
 
+def _centroid_l2_accuracy(preds:list, targets:list, tconfidence:float=.5, tfit:float=1, image_height=None) -> dict:
+    """
+    Calculates the true Positive, false positives, F1 scores for dictionaries of predictions and Outputs.
+
+    Args:
+        predictions (list): List of dictionaries containing predictions with bounding boxes, confidences and labels
+        targets (list): List of dictionaries containingwith bounding boxes, image, and labels.
+
+    Returns:
+        results (dict): Dictionary containing the anchor point precision, recall and F1 score
+    """
+    TP = 0
+    FP = 0
+    FN = 0
+    for prediction, target in zip(preds, targets):
+        mask = prediction[4] > tconfidence
+        processed_predictions = prediction[:,mask]
+        mask = target[4] != 0
+        processed_targets = target[:,mask]
+
+        predicted_centroids = _find_centroid(processed_predictions)
+        target_centroids = _find_centroid(processed_targets)
+        tp, fp, fn = _calculate_l2_true_positives(predicted_centroids, target_centroids, tfit)
+        TP += tp
+        FP += fp
+        FN += fn
+    recall = TP/(TP+FN+1e-8)
+    precision = TP/(TP+FP+1e-8)
+    f1 = 2*precision*recall/(precision+recall+1e-8)
+    return {f"F1": f1, f"Precision": precision, f"Recall": recall}
+
+def centroid_l2_accuracy(preds:list, targets:list, tconfidence:float=.5, tfit:float=1, image_height=None) -> dict:
+    """
+    Calculates the true Positive, false positives, F1 scores for dictionaries of predictions and Outputs.
+
+    Args:
+        predictions (list): List of dictionaries containing predictions with bounding boxes, confidences and labels
+        targets (list): List of dictionaries containingwith bounding boxes, image, and labels.
+
+    Returns:
+        results (dict): Dictionary containing the anchor point precision, recall and F1 score
+    """
+    TP = 0
+    FP = 0
+    FN = 0
+    for prediction, target in zip(preds, targets):
+        mask = prediction[4] > tconfidence
+        processed_predictions = prediction[:,mask]
+        mask = target[4] != 0
+        processed_targets = target[:,mask]
+
+        predicted_centroids = _find_centroid(processed_predictions)
+        target_centroids = _find_centroid(processed_targets)
+        tp, fp, fn = _calculate_l2_true_positives(predicted_centroids, target_centroids, tfit)
+        TP += tp
+        FP += fp
+        FN += fn
+    recall = TP/(TP+FN+1e-8)
+    precision = TP/(TP+FP+1e-8)
+    f1 = 2*precision*recall/(precision+recall+1e-8)
+    return {f"F1_tc-{tconfidence}_tf-{tfit}": f1, f"Precision_tc-{tconfidence}_tf-{tfit}": precision, f"Recall_tc-{tconfidence}_tf-{tfit}": recall}
+
+def centroid_l2_accuracy_Per_Image(preds:list, targets:list, tconfidence:float=.5, tfit:float=1, image_height=None) -> dict:
+    """
+    Calculates the true Positive, false positives, F1 scores for dictionaries of predictions and Outputs.
+
+    Args:
+        predictions (list): List of dictionaries containing predictions with bounding boxes, confidences and labels
+        targets (list): List of dictionaries containingwith bounding boxes, image, and labels.
+
+    Returns:
+        results (dict): Dictionary containing the anchor point precision, recall and F1 score
+    """
+    TP = []
+    FP = []
+    FN = []
+    for prediction, target in zip(preds, targets):
+        mask = prediction[4] > tconfidence
+        processed_predictions = prediction[:,mask]
+        mask = target[4] != 0
+        processed_targets = target[:,mask]
+
+        predicted_centroids = _find_centroid(processed_predictions)
+        target_centroids = _find_centroid(processed_targets)
+        tp, fp, fn = _calculate_l2_true_positives(predicted_centroids, target_centroids, tfit)
+        TP.append(tp)
+        FP.append(fp)
+        FN.append(fn)
+    return {"True_Positives": TP, "False_Positives": FP, "False_Negatives": FN}
+
 def centroid_accuracy(preds:list, targets:list, image_height=None) -> dict:
     """
     Calculates the true Positive, false positives, F1 scores for dictionaries of predictions and Outputs.
@@ -363,7 +524,7 @@ def centroid_accuracy(preds:list, targets:list, image_height=None) -> dict:
         mask = target[4] != 0
         processed_targets = target[:,mask]
 
-        centroids = _find_centroid(processed_predictions[:4,:])
+        centroids = _find_centroid(processed_predictions)
         tp, fp, fn = _calculate_true_positives(centroids, processed_targets[:4,:])
         TP += tp
         FP += fp
@@ -385,8 +546,8 @@ def calculate_centroid_difference(preds:torch.Tensor, targets:torch.Tensor, imag
         mask = target[4] != 0
         processed_targets = target[:,mask]
 
-        predicted_centroids = _find_centroid(processed_predictions[:4,:])
-        target_centroids = _find_centroid(processed_targets[:4,:])
+        predicted_centroids = _find_centroid_no_confidence(processed_predictions[:4,:])
+        target_centroids = _find_centroid_no_confidence(processed_targets[:4,:])
 
         if image_height is None:
             centroid_distances = _calculate_nearest_box_loss(predicted_centroids, target_centroids)
@@ -401,3 +562,18 @@ def calculate_centroid_difference(preds:torch.Tensor, targets:torch.Tensor, imag
         avg_distance.append(centroid_distances/max(1, num_pred_boxes))    
     
     return {"Median_predicted_boxes": np.median(num_boxes), "Median_centroid_distance": np.median(avg_distance),  "Mean_predicted_boxes": np.mean(num_boxes), "Mean_centroid_distance": np.mean(avg_distance)}
+
+def calculate_pr_curves(preds:list, targets:list, image_height=None) -> dict:
+    fit_thresholds = [0.1,0.25,0.5,0.75,1,2]
+    conf_thresholds = [0.10,0.30,0.50,0.70,0.90, 0.95, 0.99]
+    precisions = np.zeros((len(conf_thresholds),len(fit_thresholds)))
+    recalls = np.zeros((len(conf_thresholds),len(fit_thresholds)))
+    f1s = np.zeros((len(conf_thresholds),len(fit_thresholds)))
+    for conf_index, tconf in enumerate(conf_thresholds):
+        for fit_index, tfit in enumerate(fit_thresholds):
+            results_dict = _centroid_l2_accuracy(preds, targets, tconfidence=tconf, tfit=tfit)
+            precisions[conf_index,fit_index] = results_dict["Precision"]
+            recalls[conf_index,fit_index] = results_dict["Recall"]
+            f1s[conf_index,fit_index] = results_dict["F1"]
+    return {"PR_Curve_Precision": precisions, "PR_Curve_Recall":recalls, "PR_Curve_F1":f1s, "PR_Curve_Fit":fit_thresholds, "PR_Curve_Confidence":conf_thresholds}
+

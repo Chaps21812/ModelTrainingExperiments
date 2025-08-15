@@ -2,6 +2,7 @@ from torch.utils.data import DataLoader
 from pycocotools.coco import COCO
 import mlflow
 from tqdm import tqdm
+from models.Subcomponents.Post_processing_adapters import RetinaToSentinel
 from evaluation.plot_predictions import plot_prediction_bbox, plot_prediction_bbox_annotation
 from .format_targets import format_targets_bboxes
 from .image_stitching import partition_images, recombine_annotations, generate_crops
@@ -9,6 +10,44 @@ import models.LETR.src.util.misc as utils
 import torch
 import numpy as np
 
+def retinaNet_evaluate(model, epoch:int, dataloader:DataLoader, params:dict, device:str, plot_directory:str=None):
+    total_targets= []
+    total_predictions = []
+    metrics = {}
+    post_processor = RetinaToSentinel()
+
+    model.eval()
+    for images, targets in tqdm(dataloader, desc="Evaluating"):
+        images = list(img.to(device) for img in images)
+        targets = format_targets_bboxes(targets)
+        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+        H = images[0].shape[1]
+        W = images[0].shape[2]
+
+        with torch.no_grad():
+            outputs = model(images)
+        total_targets.extend([{k: v.detach().cpu() for k, v in t.items()} for t in targets])
+        total_predictions.extend([{k: v.detach().cpu() for k, v in t.items()} for t in outputs])
+        if plot_directory is not None:
+            plot_prediction_bbox(images, outputs, targets, plot_directory, epoch)
+            plot_prediction_bbox_annotation(images, outputs, targets, plot_directory, epoch)
+
+    total_targets = post_processor.convert_targets(total_targets)
+    total_predictions = post_processor(total_predictions)
+
+    confidence_thresholds = [.1, .5, .9]
+    fit_thresholds = [.5,1]
+
+    for metric in params["evaluation_metrics"]:
+        if params["TConfidence"] is not None and params["TFit"] is not None:
+            results = metric(total_predictions, total_targets, tconfidence=params["TConfidence"], tfit=params["TFit"])
+            metrics.update(results)
+        for tc in confidence_thresholds:
+            for tf in fit_thresholds:
+                results = metric(total_predictions, total_targets, tconfidence=tc, tfit=tf)
+                metrics.update(results)
+
+    return metrics
 
 def evaluate(model, dataset_directory:str, epoch:int, dataloader:DataLoader, evaluation_metrics:list, device:str, plot:bool=False):
     total_targets= []

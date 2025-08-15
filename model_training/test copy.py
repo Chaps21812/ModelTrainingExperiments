@@ -209,12 +209,86 @@ if __name__ == "__main__":
     #                 "Model LMNT02", 
     #                 "Model RME04"]
 
-    save_path = "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Plots/JustinsPlots/IACR4Panoptic"
+    # save_path = "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Plots/JustinsPlots/IACR4Panoptic"
 
-    experiments = CompiledExperiments(directories,model_labels,data_labels, save_path, save_type="pdf")
-    experiments.plot_metrics_over_time()
-    # experiments.combine_metric_plots(["Anchor_F1", "Anchor_Precision","Anchor_Recall "])
-    experiments.print_metric_avgs()
-    # experiments = CompiledExperiments(directoriesB, datasetsB,modelsB, save_path)
+    # experiments = Dataset_study.load('/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments/TESTING_R1_on_TA_Data2025-08-06_05:01/RME04Sat-_TESTING_R1_on_TA_Data2025-08-06_05:01.pkl')
+    # experiments.plot_PR_Curves()
+    # experiments.plot_per_attribute_PR("SNRs", 20)
+
+    # save_path = "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Plots/JustinsPlots/IACR4Panoptic"
+
+    # experiments = CompiledExperiments(directories,model_labels,data_labels, save_path, save_type="pdf")
     # experiments.plot_metrics_over_time()
-    # experiments.print_metric_avgs()t
+    # # experiments.combine_metric_plots(["Anchor_F1", "Anchor_Precision","Anchor_Recall "])
+    # experiments.print_metric_avgs()
+    # # experiments = CompiledExperiments(directoriesB, datasetsB,modelsB, save_path)
+    # # experiments.plot_metrics_over_time()
+    # # experiments.print_metric_avgs()t
+
+
+
+directories = [
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments/R1_on_TA_Data2025-08-06_15:17",
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments/R1_on_TA_Data2025-08-06_15:26", 
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments/R1_on_TA_Data2025-08-06_15:31", 
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments/R2_on_TA_Data2025-08-06_15:19",
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments/R2_on_TA_Data2025-08-06_15:26", 
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments/R2_on_TA_Data2025-08-06_15:31", 
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments/R5_on_TA_Data2025-08-06_15:19",
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments/R5_on_TA_Data2025-08-06_15:26",
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments/R5_on_TA_Data2025-08-06_15:31",
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments/S1R1_on_TA_Data2025-08-06_15:20",
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments/S1R1_on_TA_Data2025-08-06_15:26",
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments/S1R1_on_TA_Data2025-08-06_15:31",
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments/S2R2_on_TA_Data2025-08-06_15:20",
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments/S2R2_on_TA_Data2025-08-06_15:26",
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments/S2R2_on_TA_Data2025-08-06_15:31",
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments/S5R5_on_TA_Data2025-08-06_15:20",
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments/S5R5_on_TA_Data2025-08-06_15:26",
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Experiments/S5R5_on_TA_Data2025-08-06_15:32"
+    ]
+
+shape_labels = [
+                "Telescope A", 
+                "Telescope B",
+                "Telescope C",
+                "Telescope A", 
+                "Telescope B",
+                "Telescope C",
+                "Telescope A", 
+                "Telescope B",
+                "Telescope C",
+                "Telescope A", 
+                "Telescope B",
+                "Telescope C",
+                "Telescope A", 
+                "Telescope B",
+                "Telescope C",
+                "Telescope A", 
+                "Telescope B",
+                "Telescope C",
+                ]
+color_labels = [
+                "Real 1 Step",
+                "Real 1 Steps",
+                "Real 1 Steps", 
+                "Real 2 Step",
+                "Real 2 Steps",
+                "Real 2 Steps", 
+                "Real 5 Step",
+                "Real 5 Steps",
+                "Real 5 Steps", 
+                "Sim + Real 1 Step",
+                "Sim + Real 1 Steps",
+                "Sim + Real 1 Steps", 
+                "Sim + Real 2 Step",
+                "Sim + Real 2 Steps",
+                "Sim + Real 2 Steps", 
+                "Sim + Real 5 Step",
+                "Sim + Real 5 Steps",
+                "Sim + Real 5 Steps", 
+                ]
+save_path = "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Plots/JustinsPlots/IACCurriculumLearning"
+experiments = CompiledExperiments(directories,color_labels,shape_labels, save_path, save_type="pdf")
+
+experiments.plot_combined_PR_Curves()

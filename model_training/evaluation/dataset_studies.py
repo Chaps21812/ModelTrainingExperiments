@@ -6,6 +6,7 @@ import os
 import mlflow
 import numpy as np
 from matplotlib.lines import Line2D
+from datetime import datetime
 
 
 class Dataset_study():
@@ -20,6 +21,10 @@ class Dataset_study():
             if match is not None:
                 self.path_to_date[path] = match.group()
                 self.basename = os.path.basename(path.split(match.group())[0])
+            else:
+                date_string = "2024-08-19"
+                self.path_to_date[path] = datetime.strptime(date_string, "%Y-%m-%d")
+                self.basename = "NoDateDataset"
 
         self.output_directory = out_put_directory
         self.overal__metrics_path = os.path.join(self.output_directory, "overal_metrics.txt")
@@ -100,12 +105,111 @@ class Dataset_study():
         
     def plot_all_metrics(self):
         for key in self.dataframe.columns:
+            if "PR_Curve" in key: continue
             self.plot_metric(key)
+        self.plot_PR_Curves()
 
-    def save_cumulative_metrics(self):
-        with open(self.overal__metrics_path, 'w') as f:
-            for key, value in self.cumulative_metrics.items():
-                f.write(f"{key}: {value}\n")
+    def plot_PR_Curves(self):
+        # {"PR_Curve_Precision": precisions, "PR_Curve_Recall":recalls, "PR_Curve_F1":f1s, "PR_Curve_Fit":fit_thresholds, "PR_Curve_Confidence":conf_thresholds}
+
+        plt.figure(figsize=(6,4)) 
+        for conf_index, confidence_thresh in enumerate(self.dataframe["PR_Curve_Confidence"][0]):
+            recall = self.dataframe["PR_Curve_Recall"][0][conf_index,:]
+            precision = self.dataframe["PR_Curve_Precision"][0][conf_index,:]
+            
+            plt.plot(recall, precision, 'o-', label=f'Tc: {confidence_thresh}')
+
+        # Labels and title
+        save_path = os.path.join(self.figure_folder, f"PR_Curve_Confidence-{self.basename}.pdf")
+        plt.xlabel('Recall')
+        plt.ylabel('Precision')
+        plt.title(f'Precision-Recall Curve')
+        plt.grid(True)
+
+        plt.xlim(0,1)
+        plt.ylim(0,1)
+
+        plt.legend(loc='lower left')
+        plt.savefig(save_path)
+        plt.close()
+
+        plt.figure(figsize=(8,6)) 
+        for fit_index, fit_thresh in enumerate(self.cumulative_metrics["PR_Curve_Fit"]):
+            recall = self.cumulative_metrics["PR_Curve_Recall"][:,fit_index]
+            precision = self.cumulative_metrics["PR_Curve_Precision"][:,fit_index]
+            
+            plt.plot(recall, precision, 'o-', label=f'Tf: {fit_thresh}') 
+
+        # Labels and title
+        save_path = os.path.join(self.figure_folder, f"PR_Curve_Fit-{self.basename}.pdf")
+        plt.xlabel('Recall')
+        plt.ylabel('Precision')
+        plt.title(f'Precision-Recall Curve')
+        plt.grid(True)
+
+        plt.xlim(0,1)
+        plt.ylim(0,1)
+
+        plt.legend(loc='lower left')
+        plt.savefig(save_path)
+        plt.close()
+
+    def plot_per_attribute_PR(self, attribute:str, n_bins:int=20):
+        attrs = np.array(self.cumulative_metrics[attribute])
+        tp_list = np.array(self.cumulative_metrics["True_Positives"])
+        fp_list = np.array(self.cumulative_metrics["False_Positives"])
+        fn_list = np.array(self.cumulative_metrics["False_Negatives"])
+
+
+        # Bin edges and bin indices
+        bin_edges = np.linspace(attrs.min(), attrs.max(), n_bins + 1)
+        bin_indices = np.digitize(attrs, bins=bin_edges, right=False) - 1
+
+        # Store metrics per bin
+        precision_bins = []
+        recall_bins = []
+        f1_bins = []
+        bin_centers = []
+
+        for i in range(n_bins):
+            bin_mask = bin_indices == i
+            tp = tp_list[bin_mask].sum()
+            fp = fp_list[bin_mask].sum()
+            fn = fn_list[bin_mask].sum()
+
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+            recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+            f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+
+            precision_bins.append(precision)
+            recall_bins.append(recall)
+            f1_bins.append(f1)
+            bin_centers.append((bin_edges[i] + bin_edges[i + 1]) / 2)
+
+        # Plotting
+        fig, ax1 = plt.subplots(figsize=(6, 4))
+
+        # Histogram
+        counts, _, _ = ax1.hist(attrs, bins=bin_edges, alpha=0.4, label='SNR Histogram', color='gray')
+        ax1.set_xlabel("SNR")
+        ax1.set_ylabel("Count", color='gray')
+        ax1.tick_params(axis='y', labelcolor='gray')
+
+        # Metrics on second axis
+        ax2 = ax1.twinx()
+        ax2.plot(bin_centers, precision_bins, label='Precision', color='blue', marker='o')
+        ax2.plot(bin_centers, recall_bins, label='Recall', color='red', marker='s')
+        ax2.plot(bin_centers, f1_bins, label='F1 Score', color='green', marker='^')
+        ax2.set_ylabel("Score")
+        ax2.set_ylim(0, 1.05)
+
+        # Legends and layout
+        fig.legend(loc='upper right', bbox_to_anchor=(1, 1), bbox_transform=ax1.transAxes)
+        plt.title("Precision, Recall, and F1 Score vs SNR")
+        plt.tight_layout()
+
+        save_path = os.path.join(self.figure_folder, f"PR_vs_{attribute}-{self.basename}.pdf")
+        plt.savefig(save_path)
 
 class CompiledExperiments():
     def __init__(self, paths:list, color_legend:list, shape_legend:list, save_path:str, save_type:str="pdf"):
@@ -113,6 +217,7 @@ class CompiledExperiments():
         self.color_legend = color_legend
         self.shape_legend = shape_legend
         self.dataframes = []
+        self.studies = []
         self.save_path = save_path
         os.makedirs(self.save_path, exist_ok=True)
         self.save_type = save_type
@@ -128,14 +233,24 @@ class CompiledExperiments():
             (0.8902, 0.4667, 0.7608),
             (0.4980, 0.4980, 0.4980),
             (0.7373, 0.7412, 0.1333),
-            (0.0902, 0.7451, 0.8118)
+            (0.0902, 0.7451, 0.8118),
+            'red',
+            'blue',
+            'green',
+            'cyan',
+            'magenta',
+            'yellow',
+            'black',
+            'orange',
+            'purple',
+            'darkgreen'
         ]
  
 
         # self.matplotlib_colors = ['red','blue','green','cyan','magenta','yellow','black','orange','purple','darkgreen']
         self.matplotlib_markers = ['o',  's',  '^',  '<',  '>',  'D',  '*',  'x', '+']
-        self.matplotlib_markers = ['s',  '^',  '<',  '>',  'D',  '*',  'x', '+']
-        self.matplotlib_markers = ['^',  '0<',  '>',  'D',  '*',  'x', '+']
+        # self.matplotlib_markers = ['s',  '^',  '<',  '>',  'D',  '*',  'x', '+']
+        # self.matplotlib_markers = ['^',  '0<',  '>',  'D',  '*',  'x', '+']
 
 
         temp_dict = {}
@@ -161,8 +276,8 @@ class CompiledExperiments():
             if len(filename) > 0:
                 filename = filename[0]
             else: continue
-            study = Dataset_study(save_path,[""],"")
-            study = study.load(os.path.join(file_path, filename))
+            study = Dataset_study.load(os.path.join(file_path, filename))
+            self.studies.append(study)
             self.dataframes.append(study.dataframe)
 
     def combine_metric_plots(self, metrics:list):
@@ -186,6 +301,7 @@ class CompiledExperiments():
                 df[metric]
                 try: df[metric]
                 except KeyError: continue
+                if isinstance(df[metric], pd.Series): continue
                 if metric != "date":
                     if df[metric].max() >1:
                         large_range=True
@@ -287,7 +403,11 @@ class CompiledExperiments():
             
     def print_metric_avg(self, dataframe:pd.DataFrame):
         for key in dataframe.columns:
-            if key == "date": continue
+            if key == "date": 
+                continue
+            if isinstance(dataframe[key], pd.Series): 
+                continue
+            bruh = dataframe[key]
             average = dataframe[key].mean()
             std = dataframe[key].std()
             minn = dataframe[key].min()
@@ -298,3 +418,137 @@ class CompiledExperiments():
             print(f"\t\tMIN: {minn}")
             print(f"\t\tMAX: {maxx}")
 
+    def plot_combined_per_attribute_PR(self, attribute:str, n_bins=20, curve:str="precision", log_x:bool=False):
+        fig, ax1 = plt.subplots(figsize=(8, 6))
+
+        for j,df in enumerate(self.studies):
+            color_label = self.color_legend[j]
+            shape_label = self.shape_legend[j]
+            color_index = self.color_list.index(color_label)
+            shape_index = self.shape_list.index(shape_label)
+            color = self.matplotlib_colors[color_index]
+            shape = self.matplotlib_markers[shape_index]
+
+            ax1.set_xlabel("SNR")
+            attrs = np.array(df.cumulative_metrics[attribute])
+            if log_x:
+                ax1.set_xlabel("Log SNR")
+                attrs = np.array(df.cumulative_metrics[attribute])
+                attrs[attrs < 0] = 0 
+                attrs = np.log1p(attrs)
+            tp_list = np.array(df.cumulative_metrics["True_Positives"])
+            fp_list = np.array(df.cumulative_metrics["False_Positives"])
+            fn_list = np.array(df.cumulative_metrics["False_Negatives"])
+
+
+            # Bin edges and bin indices
+            bin_edges = np.linspace(attrs.min(), attrs.max(), n_bins + 1)
+            bin_indices = np.digitize(attrs, bins=bin_edges, right=False) - 1
+
+            # Store metrics per bin
+            precision_bins = []
+            recall_bins = []
+            f1_bins = []
+            bin_centers = []
+
+            for i in range(n_bins):
+                bin_mask = bin_indices == i
+                tp = tp_list[bin_mask].sum()
+                fp = fp_list[bin_mask].sum()
+                fn = fn_list[bin_mask].sum()
+
+                precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+                recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+                f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+
+                precision_bins.append(precision)
+                recall_bins.append(recall)
+                f1_bins.append(f1)
+                bin_centers.append((bin_edges[i] + bin_edges[i + 1]) / 2)
+            counts, _, _ = ax1.hist(attrs, bins=bin_edges, alpha=0.4, color='gray')
+            ax1.set_ylabel("Count", color='gray')
+            ax1.tick_params(axis='y', labelcolor='gray')
+            # Metrics on second axis
+            ax2 = ax1.twinx()
+            if "precision" in curve.lower():
+                plt.title("Precision")
+                ax2.plot(bin_centers, precision_bins, label=f'{color_label}', color=color, marker=shape)
+            if "recall" in curve.lower():
+                plt.title("Recall")
+                ax2.plot(bin_centers, recall_bins, label=f'{color_label}', color=color, marker=shape)
+            if "f1" in curve.lower():
+                plt.title("F1 Score vs SNR")
+                ax2.plot(bin_centers, f1_bins, label=f'{color_label}', color=color, marker=shape)
+            ax2.set_ylabel("Score")
+            ax2.set_ylim(0, 1.05)
+
+        # Legends and layout
+        fig.legend(loc='lower right', bbox_to_anchor=(1, 0), bbox_transform=ax1.transAxes)
+        # fig.legend(loc="lower right", bbox_to_anchor=(1, 1))
+        plt.tight_layout()
+
+        save_path = os.path.join(self.save_path, f"{curve}_vs_{attribute}-{self.basename}.png")
+        plt.savefig(save_path)
+
+    def plot_combined_PR_Curves(self, threshold_fit = 1, threshold_confidence = 0.5):
+        fig, ax1 = plt.subplots(figsize=(8, 6))
+
+        for j,df in enumerate(self.studies):
+            color_label = self.color_legend[j]
+            shape_label = self.shape_legend[j]
+            color_index = self.color_list.index(color_label)
+            shape_index = self.shape_list.index(shape_label)
+            color = self.matplotlib_colors[color_index]
+            shape = self.matplotlib_markers[shape_index]
+
+            confidence_index = df.cumulative_metrics["PR_Curve_Confidence"].index(threshold_confidence)
+
+            recall = df.cumulative_metrics["PR_Curve_Recall"][confidence_index,:]
+            precision = df.cumulative_metrics["PR_Curve_Precision"][confidence_index,:]
+                
+            plt.plot(recall, precision, 'o-', label=f'{color_label}', color=color)
+
+        # Labels and title
+        save_path = os.path.join(self.save_path, f"PR_Curve_Confidence-{self.basename}.png")
+        plt.xlabel('Recall')
+        plt.ylabel('Precision')
+        plt.title(f'Precision-Recall Curve')
+        plt.grid(True)
+
+        plt.xlim(0,1)
+        plt.ylim(0,1)
+
+        plt.legend(loc='lower left')
+        plt.savefig(save_path)
+        plt.close()
+
+        plt.figure(figsize=(8,6)) 
+
+        for j,df in enumerate(self.studies):
+            color_label = self.color_legend[j]
+            shape_label = self.shape_legend[j]
+            color_index = self.color_list.index(color_label)
+            shape_index = self.shape_list.index(shape_label)
+            color = self.matplotlib_colors[color_index]
+            shape = self.matplotlib_markers[shape_index]
+
+            fit_index = df.cumulative_metrics["PR_Curve_Fit"].index(threshold_fit)
+
+            recall = df.cumulative_metrics["PR_Curve_Recall"][:,fit_index]
+            precision = df.cumulative_metrics["PR_Curve_Precision"][:,fit_index]
+                
+            plt.plot(recall, precision, 'o-', label=f'{color_label}') 
+
+        # Labels and title
+        save_path = os.path.join(self.save_path, f"PR_Curve_Fit-{self.basename}.png")
+        plt.xlabel('Recall')
+        plt.ylabel('Precision')
+        plt.title(f'Precision-Recall Curve')
+        plt.grid(True)
+
+        plt.xlim(0,1)
+        plt.ylim(0,1)
+
+        plt.legend(loc='lower left')
+        plt.savefig(save_path)
+        plt.close()
