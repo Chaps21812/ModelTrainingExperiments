@@ -1,5 +1,6 @@
 import torch
-from typing import List
+from typing import List, Optional
+from torch import device
 
 #Images is a list of tensors
 #Targets is a list of dictionaries, with image_id, boxes: tensor[labels], and labels: tensor[N_boxes, 4]
@@ -294,8 +295,8 @@ def recombine_annotations(empty_image_info, predictions, device="cuda:0"):
 class ImageStitching(torch.nn.Module):
     def __init__(self, shape_x: int=512,
             shape_y: int=512,
-            overlap_x=20,
-            overlap_y=20,):
+            overlap_x:float=20,
+            overlap_y:float=20,):
         super(ImageStitching, self).__init__()
         self.shape_x = shape_x
         self.shape_y = shape_y
@@ -305,12 +306,12 @@ class ImageStitching(torch.nn.Module):
     #Cropping inspired from https://github.com/Koldim2001/YOLO-Patch-Based-Inference/blob/main/patched_yolo_infer/elements/CropElement.py#L5
     def generate_crops(self,
             images:List[torch.Tensor], 
-            targets:List[dict[str,torch.Tensor]]=None, 
+            targets:Optional[List[dict[str,torch.Tensor]]]=None, 
             shape_x: int=512,
             shape_y: int=512,
-            overlap_x=20,
-            overlap_y=20,
-            device="cuda:0",
+            overlap_x:float=20,
+            overlap_y:float=20,
+            device:Optional[torch.device]=None,
         ) -> tuple[list[torch.Tensor], list[dict[str,torch.Tensor]]]:
             """Preprocessing of the image. Generating crops with overlapping.
 
@@ -333,8 +334,8 @@ class ImageStitching(torch.nn.Module):
             cross_koef_x = 1 - (overlap_x / 100)
             cross_koef_y = 1 - (overlap_y / 100)
 
-            cropped_images = []
-            cropped_targets = []
+            cropped_images:list[torch.Tensor] = []
+            cropped_targets:list[dict[str,torch.Tensor]] = []
             image_nnid = 0
             for j, image in enumerate(images):
                 x_res = image.shape[2] #Watch for X,Y Switch here
@@ -373,12 +374,12 @@ class ImageStitching(torch.nn.Module):
                         standardized_image[:, 0:cropped_image.shape[1], 0:cropped_image.shape[2]] = cropped_image
 
                         partition_dict = {} 
-                        partition_dict["image_id"] = j
-                        partition_dict["image_step_id"] = image_nnid
-                        partition_dict["lower_x_bound"] = lower_x_bound
-                        partition_dict["lower_y_bound"] = lower_y_bound
-                        partition_dict["upper_x_bound"] = upper_x_bound 
-                        partition_dict["upper_y_bound"] = upper_y_bound
+                        partition_dict["image_id"] = torch.tensor(j)
+                        partition_dict["image_step_id"] = torch.tensor(image_nnid)
+                        partition_dict["lower_x_bound"] = torch.tensor(lower_x_bound)
+                        partition_dict["lower_y_bound"] = torch.tensor(lower_y_bound)
+                        partition_dict["upper_x_bound"] = torch.tensor(upper_x_bound) 
+                        partition_dict["upper_y_bound"] = torch.tensor(upper_y_bound)
                         
                         if targets is not None:
                             target = targets[j]
@@ -406,20 +407,26 @@ class ImageStitching(torch.nn.Module):
                                 x_on_edge = x_min_inbounds ^ x_max_inbounds
                                 y_on_edge = y_min_inbounds ^ y_max_inbounds
 
-                                if contains_x:
-                                    transformed_x_min = max(torch.tensor(lower_x_bound).to(device), x_min)-torch.tensor(lower_x_bound).to(device)
-                                    transformed_x_max = min(torch.tensor(upper_x_bound).to(device), x_max)-torch.tensor(lower_x_bound).to(device)
-                                if contains_y: 
-                                    transformed_y_min = max(torch.tensor(lower_y_bound).to(device), y_min)-torch.tensor(lower_y_bound).to(device)
-                                    transformed_y_max = min(torch.tensor(upper_y_bound).to(device), y_max)-torch.tensor(lower_y_bound).to(device)
+                                transformed_x_min = max(torch.tensor(lower_x_bound).to(device), x_min)-torch.tensor(lower_x_bound).to(device)
+                                transformed_x_max = min(torch.tensor(upper_x_bound).to(device), x_max)-torch.tensor(lower_x_bound).to(device)
+                                transformed_y_min = max(torch.tensor(lower_y_bound).to(device), y_min)-torch.tensor(lower_y_bound).to(device)
+                                transformed_y_max = min(torch.tensor(upper_y_bound).to(device), y_max)-torch.tensor(lower_y_bound).to(device)
+
+                                bounded_annotation = torch.tensor([transformed_x_min, transformed_y_min, transformed_x_max, transformed_y_max])
+                                bounded_annotation = bounded_annotation.reshape((1,4)).to(device)
+                                category_label = torch.tensor(int(target["labels"][i])).to(device)
+                                score = torch.tensor([1]).to(device)
+
                                 if contains_x and contains_y:
-                                    bounded_annotation = torch.tensor([transformed_x_min, transformed_y_min, transformed_x_max, transformed_y_max])
-                                    bounded_annotation = bounded_annotation.reshape((1,4)).to(device)
-                                    category_label = torch.tensor(int(target["labels"][i])).to(device)
-                                    score = torch.tensor([1]).to(device)
                                     scores_tensor = torch.vstack([scores_tensor, score.float()])
                                     targets_tensors = torch.vstack([targets_tensors, bounded_annotation.float()])
                                     labels_tensor = torch.vstack([labels_tensor, category_label.int()])
+                                else:
+                                    targets_tensors = torch.empty((0,4)).to(device)
+                                    labels_tensor = torch.empty((0,1)).to(device).int()
+                                    scores_tensor = torch.empty((0,1)).to(device)
+
+
                             partition_dict["boxes"] = targets_tensors.to(device)
                             partition_dict["labels"] = labels_tensor.to(device)
                             partition_dict["scores"] = scores_tensor.to(device)
@@ -428,19 +435,17 @@ class ImageStitching(torch.nn.Module):
                         cropped_targets.append(partition_dict)
                         cropped_images.append(standardized_image.to(device))
                         cropped_image = cropped_image.cpu()
-                        del cropped_image
-                        torch.cuda.empty_cache() 
+                        cropped_image=None
                 image = image.cpu()
-                del image
-                torch.cuda.empty_cache() 
-            return cropped_images, cropped_targets
+                image = None
+            return (cropped_images, cropped_targets)
 
-    def recombine_annotations(self, empty_image_info, predictions, device="cuda:0") -> list:
-        image_compilation_dict = {}
-        previous_bounds = []
+    def recombine_annotations(self, empty_image_info:list[dict[str,torch.Tensor]], predictions:list[dict[str,torch.Tensor]], device:Optional[torch.device]=None,) -> list[dict[str,torch.Tensor]]:
+        image_compilation_dict:dict[int,dict[str,torch.Tensor]] = {}
+        previous_bounds:list[dict[str,torch.Tensor]] = []
         for target,prediction in zip(empty_image_info, predictions):
             #Create a dictionary containing all information relevant to cropped image
-            bound_dict = {"LX":target["lower_x_bound"],
+            bound_dict:dict[str,torch.Tensor] = {"LX":target["lower_x_bound"],
             "LY":target["lower_y_bound"],
             "UX":target["upper_x_bound"],
             "UY":target["upper_y_bound"], 
@@ -449,7 +454,7 @@ class ImageStitching(torch.nn.Module):
             "Scores": torch.empty((0,1)).to(device)}
             
             #If the image belongs to a certian original image, then do the appropriate math
-            orig_index = bound_dict["image_id"]
+            orig_index = bound_dict["image_id"].item()
             if orig_index not in image_compilation_dict:
                 image_compilation_dict[orig_index] = {}
                 image_compilation_dict[orig_index]["boxes"] = torch.empty((0,4)).to(device)
@@ -463,33 +468,35 @@ class ImageStitching(torch.nn.Module):
                 score = prediction["scores"][l]
                 label = prediction["labels"][l]
                 _bbox = row.clone().detach()
-                _bbox[0] += target["lower_x_bound"]
-                _bbox[1] += target["lower_y_bound"]
-                _bbox[2] += target["lower_x_bound"]
-                _bbox[3] += target["lower_y_bound"]
+                _bbox[0] += target["lower_x_bound"].item()
+                _bbox[1] += target["lower_y_bound"].item()
+                _bbox[2] += target["lower_x_bound"].item()
+                _bbox[3] += target["lower_y_bound"].item()
                 _bbox = _bbox.to(device)
 
                 #Check if the bbox is completely inbounds for a previous detection
                 completely_inbounds = False
                 for bounded_area in previous_bounds:
-                    LX_inbounds = bounded_area["LX"] < _bbox[0] < bounded_area["UX"] 
-                    LY_inbounds = bounded_area["LY"] < _bbox[1] < bounded_area["UY"]
-                    UX_inbounds = bounded_area["LX"] < _bbox[2] < bounded_area["UX"]
-                    UY_inbounds = bounded_area["LY"] < _bbox[3] < bounded_area["UY"]
+                    LX_inbounds = bounded_area["LX"].item() < _bbox[0] < bounded_area["UX"].item() 
+                    LY_inbounds = bounded_area["LY"].item() < _bbox[1] < bounded_area["UY"].item()
+                    UX_inbounds = bounded_area["LX"].item() < _bbox[2] < bounded_area["UX"].item()
+                    UY_inbounds = bounded_area["LY"].item() < _bbox[3] < bounded_area["UY"].item()
                     completely_inbounds = LX_inbounds and LY_inbounds and UX_inbounds and UY_inbounds
                     if completely_inbounds: break
+                    else: pass
 
                 #If the bounding box hasnt been completely inbounds for a previous cropped image "new box", then add to detections
                 if not completely_inbounds:
                     image_compilation_dict[orig_index]["boxes"] = torch.vstack([image_compilation_dict[orig_index]["boxes"],_bbox]).to(device)
                     image_compilation_dict[orig_index]["scores"] = torch.vstack([image_compilation_dict[orig_index]["scores"],score]).to(device)
                     image_compilation_dict[orig_index]["labels"] = torch.vstack([image_compilation_dict[orig_index]["labels"],label]).to(device)
+                else:pass
 
                 #Else we have already seen this detection, do nothing. 
             #Add the previous bounds to the list of seen bounds to cross reference later
             previous_bounds.append(bound_dict)
 
-        output_targets = []
+        output_targets:list[dict[str,torch.Tensor]] = []
         for i in range(len(image_compilation_dict)):
             output_targets.append(image_compilation_dict[i])
             

@@ -7,7 +7,7 @@ from datetime import datetime
 import os
 import mlflow
 from models.Sentinel_Models.Sentinel_Retina_Net import Sentinel
-from evaluation.evaluation_metrics import calculate_pr_curves, centroid_l2_accuracy, centroid_l2_accuracy_Per_Image
+from evaluation.evaluation_metrics import centroid_l2_accuracy
 from training_frameworks.evaluate_one_epoch import retinaNet_evaluate
 from training_frameworks.train_one_epoch import train_one_epoch
 from training_frameworks.nan_detection import check_loss_for_nans
@@ -15,11 +15,18 @@ from training_frameworks.nan_detection import check_loss_for_nans
 
 if __name__ == "__main__":
 
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_LMNT01_train_10_Overlap"
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_LMNT01_train_20_Overlap"
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_LMNT01_train_30_Overlap"
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_LMNT01_train_random_Overlap"
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_LMNT02_train_random_overlap"
+    "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_RME04_train_random_overlap"
+
     train_params = {
-        "project": "TEsting",
-        "experiment_name": "testing_new_training_file",
-        "epochs": 250,
-        "batch_size": 36,
+        "project": "ImageChipping",
+        "experiment_name": "L1_20_Overlap",
+        "epochs": 256,
+        "batch_size": 42,
         "lr": 1e-4, #sqrt(batch_size)*4e-4
         "gpu": 6,
         "momentum": 0.9,
@@ -27,8 +34,8 @@ if __name__ == "__main__":
         "TConfidence": None,
         "TFit":None,
         "model_path": None,
-        "training_dir": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_LMNT01_train_random_Overlap/val",
-        "validation_dir": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_LMNT01_train_random_Overlap/val",
+        "training_dir": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_LMNT01_train_20_Overlap/train",
+        "validation_dir": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_LMNT01_train_20_Overlap/val",
         "evaluation_metrics": [centroid_l2_accuracy], 
     }
 
@@ -44,6 +51,7 @@ if __name__ == "__main__":
     base_dir = os.path.dirname(training_dir)
     models_dir = os.path.join(base_dir, "models", run_name)
     train_params["model_save_dir"] = models_dir
+    train_params["script_name"] = __file__
     os.makedirs(models_dir, exist_ok=True)
 
     # Load COCO-style dataset

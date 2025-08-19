@@ -23,14 +23,16 @@ class Sentinel_Panoptic(torch.nn.Module):
 
     def forward(self, images:torch.Tensor, targets:Optional[List[Dict[str,torch.Tensor]]]=None ) -> torch.Tensor:
         device = images.device
+        resolutions:List[List[int]] = self.get_resolutions(images)
         preprocessed:List[torch.Tensor] = self.preprocess(images)
-        cropped_images, targets = self.stitcher.generate_crops(preprocessed, device=device)
-        resolutions:List[List[int]] = self.get_resolutions(cropped_images)
+        temptuple:tuple[list[torch.Tensor], list[dict[str,torch.Tensor]]] = self.stitcher.generate_crops(preprocessed, device=device)
+        cropped_images= temptuple[0]
+        targets=temptuple[1]
 
         sub_batch_image = [cropped_images[i:i + self.sub_batch_size] for i in range(0, len(cropped_images), self.sub_batch_size)]
         sub_batch_targets = [targets[i:i + self.sub_batch_size] for i in range(0, len(targets), self.sub_batch_size)]
 
-        temporary_outputs = []
+        temporary_outputs:List[Dict[str, torch.Tensor]] = []
         with torch.no_grad():
             for sub_images in sub_batch_image:        
                 # In eval mode: run inference and postprocess
