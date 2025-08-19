@@ -15,19 +15,23 @@ def retinaNet_evaluate(model, epoch:int, dataloader:DataLoader, params:dict, dev
     total_predictions = []
     metrics = {}
     post_processor = RetinaToSentinel()
+    losses = []
+    total_images = []
 
-    model.eval()
     for images, targets in tqdm(dataloader, desc="Evaluating"):
         images = list(img.to(device) for img in images)
         targets = format_targets_bboxes(targets)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
-        H = images[0].shape[1]
-        W = images[0].shape[2]
 
         with torch.no_grad():
+            model.train()
+            loss_dict = model(images, targets)
+            model.eval()
             outputs = model(images)
         total_targets.extend([{k: v.detach().cpu() for k, v in t.items()} for t in targets])
         total_predictions.extend([{k: v.detach().cpu() for k, v in t.items()} for t in outputs])
+        losses.append(loss_dict)
+        total_images.append(len(targets))
         if plot_directory is not None:
             plot_prediction_bbox(images, outputs, targets, plot_directory, epoch)
             plot_prediction_bbox_annotation(images, outputs, targets, plot_directory, epoch)
@@ -46,8 +50,9 @@ def retinaNet_evaluate(model, epoch:int, dataloader:DataLoader, params:dict, dev
             for tf in fit_thresholds:
                 results = metric(total_predictions, total_targets, tconfidence=tc, tfit=tf)
                 metrics.update(results)
-
-    return metrics
+    total_losses = {k: sum(d[k] for d in losses) for k,v in losses[0].items()}
+    
+    return metrics, total_losses
 
 def evaluate(model, dataset_directory:str, epoch:int, dataloader:DataLoader, evaluation_metrics:list, device:str, plot:bool=False):
     total_targets= []
