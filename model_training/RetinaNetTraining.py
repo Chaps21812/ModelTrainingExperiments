@@ -31,7 +31,7 @@ if __name__ == "__main__":
         "validation_dir": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/CL_L1_1_TTS/val",
         "evaluation_metrics": [centroid_l2_accuracy], 
         "early_stopping_metric":"bbox_regression", #bbox_regression, F1_tc-0.5_tf-1, None
-        "patience_epochs":3,
+        "patience_epochs":15,
     }
 
     # Custom transforms (RetinaNet expects images and targets)
