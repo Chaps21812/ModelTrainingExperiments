@@ -564,8 +564,8 @@ def calculate_centroid_difference(preds:torch.Tensor, targets:torch.Tensor, imag
     return {"Median_predicted_boxes": np.median(num_boxes), "Median_centroid_distance": np.median(avg_distance),  "Mean_predicted_boxes": np.mean(num_boxes), "Mean_centroid_distance": np.mean(avg_distance)}
 
 def calculate_pr_curves(preds:list, targets:list, image_height=None) -> dict:
-    fit_thresholds = [0.1,0.25,0.5,0.75,1,2]
-    conf_thresholds = [0.10,0.30,0.50,0.70,0.90, 0.95, 0.99]
+    fit_thresholds = [0.1,0.25,0.5,0.75,1,2,4,8,16]
+    conf_thresholds = [x / 20 for x in range(0, 21)] 
     precisions = np.zeros((len(conf_thresholds),len(fit_thresholds)))
     recalls = np.zeros((len(conf_thresholds),len(fit_thresholds)))
     f1s = np.zeros((len(conf_thresholds),len(fit_thresholds)))

@@ -37,7 +37,10 @@ if __name__ == "__main__":
         "training_dir": training_sets,
         "validation_dir": validation_sets,
         "evaluation_metrics": [centroid_l2_accuracy], 
+        "early_stopping_metric":"bbox_regression", #bbox_regression, F1_tc-0.5_tf-1, None
+        "patience_epochs":10,
     }
+
     # Custom transforms (RetinaNet expects images and targets)
     transform = T.Compose([
         T.ToTensor(),
@@ -94,11 +97,21 @@ if __name__ == "__main__":
         training_set = 0
         try:
             # Training Loop
+            best_performance = 0
+            best_loss = 1000
+            waited_epochs = 0
+            stopping_metric = train_params["early_stopping_metric"]
             model.train()
             for epoch in range(train_params["epochs"]):
                 if epoch_counter >= train_params["switch_every"]:
+                    best_performance = 0
+                    best_loss = 1000
                     epoch_counter = 0
+                    waited_epochs = 0
                     training_set += 1
+                    mlflow.log_param(f"Dataset switch {training_set}", f"Dataset switch on epoch {epoch}")
+                if training_set >= len(tloaders):
+                    break
                 training_loader = tloaders[training_set]
                 if isinstance(train_params["validation_dir"], str):
                     validation_loader = validation_loader
@@ -108,16 +121,30 @@ if __name__ == "__main__":
                 path = os.path.join(models_dir,f"{train_params["experiment_name"]}_weights_E{epoch}.pt")
                 losses = train_one_epoch(model, optimizer, training_loader, device, epoch)
                 check_loss_for_nans(losses, epoch)
-                mlflow.log_metrics(losses, epoch) 
                 torch.save(model.state_dict(), path)
-                results = retinaNet_evaluate(model, epoch, validation_loader, train_params, device)
+                results, validation_losses = retinaNet_evaluate(model, epoch, validation_loader, train_params, device)
+                if stopping_metric is not None:
+                    waited_epochs += 1
+                if stopping_metric is not None and stopping_metric in results:
+                    if results[stopping_metric] > best_performance:
+                        waited_epochs = 0
+                        best_performance = results[stopping_metric]
+                elif stopping_metric is not None and stopping_metric in validation_losses:
+                    if validation_losses[stopping_metric] < best_loss:
+                        waited_epochs = 0
+                        best_loss = validation_losses[stopping_metric].item()
+                training_losses = {f"training_{k}":v for k,v in losses.items()}
+                processed_losses = {f"validation_{k}":v for k,v in validation_losses.items()}
                 mlflow.log_metrics(results, epoch) 
-
-                # mlflow.pytorch.log_model(model, artifact_path=path)
-                # # Register it in the Model Registry
-                # result = mlflow.register_model(
-                #     model_uri=f"runs:/{mlflow.active_run().info.run_id}/{path}",
-                #     name=f"retinanet_weights_E{epoch}.pt")
+                mlflow.log_metrics(training_losses, epoch) 
+                mlflow.log_metrics(processed_losses, epoch) 
+                if waited_epochs >= train_params["patience_epochs"]:
+                    best_performance = 0
+                    best_loss = 1000
+                    training_set += 1
+                    epoch_counter = 0
+                    waited_epochs = 0
+                    mlflow.log_param(f"Dataset switch {training_set}", f"Dataset switch on epoch {epoch}")
             mlflow.end_run()
         except Exception as e:
             # Log the exception message as a tag or param

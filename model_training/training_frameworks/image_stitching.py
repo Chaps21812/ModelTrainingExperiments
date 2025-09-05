@@ -477,10 +477,10 @@ class ImageStitching(torch.nn.Module):
                 #Check if the bbox is completely inbounds for a previous detection
                 completely_inbounds = False
                 for bounded_area in previous_bounds:
-                    LX_inbounds = bounded_area["LX"].item() < _bbox[0] < bounded_area["UX"].item() 
-                    LY_inbounds = bounded_area["LY"].item() < _bbox[1] < bounded_area["UY"].item()
-                    UX_inbounds = bounded_area["LX"].item() < _bbox[2] < bounded_area["UX"].item()
-                    UY_inbounds = bounded_area["LY"].item() < _bbox[3] < bounded_area["UY"].item()
+                    LX_inbounds = bounded_area["LX"].item() < _bbox[0].item() < bounded_area["UX"].item() 
+                    LY_inbounds = bounded_area["LY"].item() < _bbox[1].item() < bounded_area["UY"].item()
+                    UX_inbounds = bounded_area["LX"].item() < _bbox[2].item() < bounded_area["UX"].item()
+                    UY_inbounds = bounded_area["LY"].item() < _bbox[3].item() < bounded_area["UY"].item()
                     completely_inbounds = LX_inbounds and LY_inbounds and UX_inbounds and UY_inbounds
                     if completely_inbounds: break
                     else: pass
