@@ -8,6 +8,7 @@ import json
 import numpy as np
 from matplotlib.lines import Line2D
 from datetime import datetime
+from scipy.optimize import curve_fit
 
 def generate_color_gradient(hex1, hex2, n):
     """
@@ -47,7 +48,8 @@ def generate_color_gradient(hex1, hex2, n):
 
     return gradient
 
-
+def scaling_law(N, M_inf, A, alpha):
+    return M_inf - A / (N**alpha)
 
 class Single_Dataset_Study():
     def __init__(self, out_put_directory:str, testing_sets:list, title:str):
@@ -105,8 +107,8 @@ class Single_Dataset_Study():
     def add_image_ids(self, ids:list):
         self.image_ids = ids
 
-    def plot_PR_Curves(self, save_path=None, plot_format:str="pdf"):
-        plt.figure(figsize=(6,4)) 
+    def plot_PR_Curves(self, save_path=None, plot_format:str="pdf", best_precision=0.99):
+        plt.figure(figsize=(12,8)) 
         for conf_index, confidence_thresh in enumerate(self.cumulative_metrics["PR_Curve_Confidence"]):
             recall = self.cumulative_metrics["PR_Curve_Recall"][conf_index,:]
             precision = self.cumulative_metrics["PR_Curve_Precision"][conf_index,:]
@@ -130,19 +132,39 @@ class Single_Dataset_Study():
         plt.savefig(save_name)
         plt.close()
 
-        plt.figure(figsize=(8,6)) 
+        best_f1_table = "Tf & Tc* & F1*\\\\\n\\hline\n"
+        best_precision_table = "Tf & Tc & Precision & Recall & F1\\\\\n\\hline\n"
+
+        plt.figure(figsize=(12,8)) 
+        plt.axhline(y=0.99, linestyle='--', color='red', linewidth=1.5)
+        plt.axvline(x=0.9, linestyle='--', color='red', linewidth=1.5)
         for fit_index, fit_thresh in enumerate(self.cumulative_metrics["PR_Curve_Fit"]):
             recall = self.cumulative_metrics["PR_Curve_Recall"][:,fit_index]
             precision = self.cumulative_metrics["PR_Curve_Precision"][:,fit_index]
-            
-            plt.plot(recall, precision, 'o-', label=f'Tf: {fit_thresh}') 
+            F1 = [2*recall[i]*precision[i]/(recall[i]+precision[i]+.01) for i in range(len(recall))]
+            best_f1 = np.argmax(F1)
+
+            best_f1_table += f"{fit_thresh} & {self.cumulative_metrics["PR_Curve_Confidence"][best_f1]:.2f} &{F1[best_f1]:.2f}\\\\\n"
+            for pindex,p in enumerate(precision):
+                if p>best_precision:
+                    best_precision_table+= f"{fit_thresh} & {self.cumulative_metrics["PR_Curve_Confidence"][pindex]:.2f} & {precision[pindex]:.2f} & {recall[pindex]:.2f} & {F1[pindex]:.2f}\\\\\n"
+    
+            plt.plot(recall, precision, 'o-', label=f'Tf: {fit_thresh}, F1*={F1[best_f1]:.2f}') 
 
         # Labels and title
                 # Labels and title
         if save_path is None:
             save_name = os.path.join(self.figure_folder, f"PR_Curve_Fit-{self.basename}.{plot_format}")
+            with open(os.path.join(self.figure_folder,"best_results"), "w") as f:
+                f.write(best_f1_table)
+                f.write("\n")
+                f.write(best_precision_table)
         else:
             save_name = os.path.join(save_path, f"PR_Curve_Fit-{self.basename}.{plot_format}")
+            with open(os.path.join(save_path,"best_results"), "w") as f:
+                f.write(best_f1_table)
+                f.write("\n")
+                f.write(best_precision_table)
         plt.xlabel('Recall')
         plt.ylabel('Precision')
         plt.title(f'Precision-Recall Curve')
@@ -151,11 +173,11 @@ class Single_Dataset_Study():
         plt.xlim(0,1)
         plt.ylim(0,1)
 
-        plt.legend(loc='lower left')
+        plt.legend(loc='upper left')
         plt.savefig(save_name)
         plt.close()
 
-    def plot_per_attribute_PR(self, attribute:str, n_bins:int=20, plot_format:str="pdf"):
+    def plot_per_attribute_PR(self, attribute:str, n_bins:int=20, plot_format:str="pdf", log_y=False):
         annotations_by_image = self.cumulative_metrics["original_tgt_attributes"]
 
         attribute_list = []
@@ -164,7 +186,7 @@ class Single_Dataset_Study():
         fn_list = []
 
         # average_annotation_attributes = [sum(annot[attribute] for annot in im)/len(im) if len(im) > 0 else -1 for im in annotations_by_image]
-        for index,image_gts in annotations_by_image:
+        for index,image_gts in enumerate(annotations_by_image):
             if len(image_gts)>0:
                 attribute_list.append(sum(annot[attribute] for annot in image_gts)/len(image_gts))
                 tp_list.append(self.cumulative_metrics["True_Positives"][index])
@@ -173,7 +195,10 @@ class Single_Dataset_Study():
             else: #Excluding images with no targets in them
                 pass
 
-        attrs = np.array(attribute_list)
+        if log_y:
+            attrs = np.log(np.absolute(np.array(attribute_list)))
+        else:
+            attrs = np.array(attribute_list)
         tp_list = np.array(tp_list)
         fp_list = np.array(fp_list)
         fn_list = np.array(fn_list)
@@ -208,7 +233,10 @@ class Single_Dataset_Study():
 
         # Histogram
         counts, _, _ = ax1.hist(attrs, bins=bin_edges, alpha=0.4, label=f'{attribute} Histogram'.title(), color='gray')
-        ax1.set_xlabel(f'{attribute}'.title())
+        if log_y:
+            ax1.set_xlabel(f"Log10({attribute})", color='gray')
+        else:
+            ax1.set_xlabel(f'{attribute}'.title())
         ax1.set_ylabel("Count", color='gray')
         ax1.tick_params(axis='y', labelcolor='gray')
 
@@ -221,7 +249,7 @@ class Single_Dataset_Study():
         ax2.set_ylim(0, 1.05)
 
         # Legends and layout
-        fig.legend(loc='upper right', bbox_to_anchor=(1, 1), bbox_transform=ax1.transAxes)
+        fig.legend(loc='upper left', bbox_to_anchor=(1, 1), bbox_transform=ax1.transAxes)
         plt.title("Precision, Recall, and F1 Score vs SNR")
         plt.tight_layout()
 
@@ -229,7 +257,7 @@ class Single_Dataset_Study():
         plt.savefig(save_path)
 
 class Multi_Dataset_Study():
-    def __init__(self, paths:list, color_legend:list, second_characteristic:list, save_path:str, save_type:str="pdf", second_char_type="line",color_gradient=("#40B9DB", "#FFA21F")):
+    def __init__(self, paths:list, color_legend:list, second_characteristic:list, save_path:str, save_type:str="pdf", second_char_type="line",color_gradient=("#40B9DB", "#FFA21F"), dataset_sizes:list=None):
         self.paths = paths
         self.color_legend = color_legend
         self.shape_legend = second_characteristic
@@ -241,6 +269,7 @@ class Multi_Dataset_Study():
         self.save_type = save_type
         self.basename = os.path.basename(save_path)
         self.second_char_type = second_char_type
+        self.dataset_sizes = dataset_sizes
 
         for e in paths:
             dataset_study:Single_Dataset_Study = Single_Dataset_Study.load(e)
@@ -324,8 +353,6 @@ class Multi_Dataset_Study():
             Line2D([0], [0], color="black", linestyle="-", linewidth=3, label=self.opacity_list[ls], alpha=self.matplotlib_opacity[ls])
             for ls in range(len(self.opacity_list))
         ]
-
-        
 
     def combine_metric_plots(self, metrics:list):
         plt.clf() 
@@ -693,6 +720,56 @@ class Multi_Dataset_Study():
 
         plt.savefig(save_path)
         plt.close()
+
+    def calculate_scaling_law(self, tfit=1, tconf=0.5, save_type:str="pdf", fig_size:tuple=(8,6), shape_size=1, shape_color="#0199F1", fit_color="#F38B0D"):
+        plt.figure(figsize=fig_size) 
+        precisions = []
+        recalls = []
+        f1s = []
+        dataset_sizes = []
+        titles = ["Precision", "Recall", "F1"]
+
+        for j,df in enumerate(self.dataset_studies):
+            confidence_index = df.cumulative_metrics["PR_Curve_Confidence"].index(tconf)
+            fit_index = df.cumulative_metrics["PR_Curve_Fit"].index(tfit)
+            recall = df.cumulative_metrics["PR_Curve_Recall"][confidence_index,fit_index]
+            precision = df.cumulative_metrics["PR_Curve_Precision"][confidence_index,fit_index]
+            F1 = 2*recall*precision/(recall+precision)
+            dataset_size = self.dataset_sizes[j]
+
+            precisions.append(precision)
+            recalls.append(recall)
+            f1s.append(F1)
+            dataset_sizes.append(dataset_size)
+
+        for k,l in enumerate([precisions, recalls, f1s]):
+            initial_guess = [0.5, 1.0, 0.1]  # [M_inf, A, alpha]
+            popt, pcov = curve_fit(scaling_law, dataset_sizes, l, p0=initial_guess, maxfev=10000)
+            M_inf, A, alpha = popt
+
+            N_fit = np.logspace(np.log10(min(dataset_sizes)), np.log10(max(dataset_sizes)*10), 200)
+            M_fit = scaling_law(N_fit, *popt)
+
+            plt.title(f"{titles[k]} Scaling Law Tf = {tfit}, Tc = {tconf}")
+            plt.plot(N_fit, M_fit, label=f"Fit: M_inf={M_inf:.2f}, α={alpha:.2f}", color=fit_color)
+            plt.scatter(dataset_sizes, l, marker="D", color=shape_color)
+            plt.xscale("log")
+            plt.xlabel("Dataset size (N)")
+            plt.ylabel("Performance")
+            plt.legend()
+            
+            print(f"{titles[k]} Scaling Law: M_inf={M_inf}, alpha={alpha}")
+
+            save_path = os.path.join(self.save_path, f"ScalingLaw-{titles[k]}-{self.basename}.{save_type}")
+            plt.savefig(save_path)
+            plt.close()
+
+
+        
+
+
+
+
 
 class Dataset_study():
     def __init__(self, out_put_directory:str, testing_sets:list, title:str):

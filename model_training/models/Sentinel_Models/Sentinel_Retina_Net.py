@@ -9,11 +9,13 @@ from astropy.visualization import ZScaleInterval
 
 
 class Sentinel(torch.nn.Module):
-    def __init__(self, normalize:bool=True):
+    def __init__(self, normalize:bool=True, tc=0.0,min_size=512, max_size=10000, recentroid=False ):
         super().__init__()
-        self.retina_net = retinanet_resnet50_fpn()
+        self.retina_net = retinanet_resnet50_fpn( min_size=min_size, max_size=max_size)
         self.output_formatter = RetinaToSentinel()
         self.normalize_outputs = normalize
+        self.tc = tc
+        self.recentroid_output = recentroid
 
     def forward(self, images:torch.Tensor, targets:Optional[List[Dict[str,torch.Tensor]]]=None ) -> torch.Tensor:
         preprocessed:List[torch.Tensor] = self.preprocess(images)
@@ -34,7 +36,13 @@ class Sentinel(torch.nn.Module):
             post_processed: torch.Tensor = self.normalize(outputs, resolutions)
         else: 
             post_processed: torch.Tensor = outputs
-        return post_processed
+
+        post_processed_tc = self.confidence_threshold(post_processed)
+        if self.recentroid_output:
+            recentroided = self.recentroid(images,post_processed_tc)
+            return recentroided
+        else:
+            return post_processed_tc
 
     @torch.jit.ignore()
     def load_original_model(self, model_path) -> None:
@@ -61,3 +69,49 @@ class Sentinel(torch.nn.Module):
             outputs[i,2,:] = outputs[i,2,:]/resolutions[i][0]
             outputs[i,3,:] = outputs[i,3,:]/resolutions[i][1]
         return outputs
+    
+    def confidence_threshold(self, outputs:torch.Tensor) -> torch.Tensor:
+        max_size = 0
+        filtered = []
+        for i in range(outputs.shape[0]):
+            keep = outputs[i, 4, :] > self.tc
+            filtered.append(outputs[i, :, keep]) 
+            max_size = max(max_size,outputs[i, :, keep].shape[1])
+
+        out = torch.zeros((outputs.size(0), 5, max_size))
+        for i,image in enumerate(filtered): 
+            out[i, :, :image.shape[1]] = image
+        return out
+    
+    def recentroid(self, images:List[torch.Tensor], outputs:torch.Tensor) -> torch.Tensor:
+        for image_index,predictions in enumerate(outputs):
+            for pindex in range(predictions.shape[1]):
+                xc = predictions[0,pindex]
+                yc = predictions[1,pindex]
+                w = predictions[2,pindex]
+                h = predictions[3,pindex]
+                xmin = xc-w/2-8
+                xmax = xc+w/2+8
+                ymin = yc-h/2-8
+                ymax = yc+h/2+8
+                subsection = images[image_index][:,xmin:xmax+1,ymin:ymax+1]
+                median_pixel_value = torch.median(subsection)
+                
+                y_num_sum = 0
+                x_num_sum = 0
+                y_den_sum = 0
+                x_den_sum = 0
+                for x_index,xrow in subsection:
+                    for y_index,pixel_value in xrow:
+                        if pixel_value>median_pixel_value:
+                            x_num_sum += pixel_value*x_index
+                            y_num_sum += pixel_value*y_index
+                            x_den_sum += pixel_value
+                            y_den_sum += pixel_value
+                new_xc = x_num_sum/x_den_sum
+                new_yc = y_num_sum/y_den_sum
+
+                outputs[image_index,0,pindex] = new_xc
+                outputs[image_index,1,pindex] = new_yc
+        return outputs
+            

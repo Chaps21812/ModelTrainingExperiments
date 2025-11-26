@@ -24,19 +24,21 @@ if __name__ == "__main__":
 
     train_params = {
         "project": "ImageChipping",
-        "experiment_name": "R4_R_Overlap",
+        "experiment_name": "NoStop_L1_R_SmallOverlap",
         "epochs": 256,
         "batch_size": 42,
         "lr": 1e-4, #sqrt(batch_size)*4e-4
-        "gpu": 7,
+        "gpu": 6,
         "momentum": 0.9,
         "weight_decay": 0.0005, 
         "TConfidence": None,
         "TFit":None,
         "model_path": None,
-        "training_dir": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_RME04_train_random_overlap/train",
-        "validation_dir": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_RME04_train_random_overlap/val",
+        "training_dir": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_LMNT01_train_random_Overlap/small_train",
+        "validation_dir": "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/Finalized_datasets/Panoptic_MC_LMNT01_train_random_Overlap/small_val",
         "evaluation_metrics": [centroid_l2_accuracy], 
+        "early_stopping_metric":"bbox_regression", #bbox_regression, F1_tc-0.5_tf-1, None
+        "patience_epochs":256,
     }
 
     # Custom transforms (RetinaNet expects images and targets)
@@ -79,14 +81,35 @@ if __name__ == "__main__":
         try:
             # Training Loop
             model.train()
+            best_performance = 0
+            best_loss = 1000
+            waited_epochs = 0
+            stopping_metric = train_params["early_stopping_metric"]
             for epoch in range(train_params["epochs"]):
                 path = os.path.join(models_dir,f"{train_params["experiment_name"]}_weights_E{epoch}.pt")
                 losses = train_one_epoch(model, optimizer, training_loader, device, epoch)
                 check_loss_for_nans(losses, epoch)
-                mlflow.log_metrics(losses, epoch) 
                 torch.save(model.state_dict(), path)
-                results = retinaNet_evaluate(model, epoch, validation_loader, train_params, device)
+                results, validation_losses = retinaNet_evaluate(model, epoch, validation_loader, train_params, device)
+                if stopping_metric is not None:
+                    waited_epochs += 1
+                if stopping_metric is not None and stopping_metric in results:
+                    if results[stopping_metric] > best_performance:
+                        waited_epochs = 0
+                        best_performance = results[stopping_metric]
+                elif stopping_metric is not None and stopping_metric in validation_losses:
+                    if validation_losses[stopping_metric] < best_loss:
+                        waited_epochs = 0
+                        best_loss = validation_losses[stopping_metric].item()
+                training_losses = {f"training_{k}":v for k,v in losses.items()}
+                processed_losses = {f"validation_{k}":v for k,v in validation_losses.items()}
                 mlflow.log_metrics(results, epoch) 
+                mlflow.log_metrics(training_losses, epoch) 
+                mlflow.log_metrics(processed_losses, epoch) 
+                if waited_epochs >= train_params["patience_epochs"]:
+                    mlflow.log_param("run_status", f"Completed: Early Stop on Epoch {epoch}")
+                    break
+
 
                 # mlflow.pytorch.log_model(model, artifact_path=path)
                 # # Register it in the Model Registry

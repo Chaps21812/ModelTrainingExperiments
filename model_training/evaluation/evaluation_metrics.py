@@ -3,6 +3,30 @@ import numpy as np
 import torch
 from scipy.optimize import linear_sum_assignment
 
+def _find_centroid_normal(tensor: Tensor) -> Tensor:
+    """
+    Find the centroid of the bounding box given XC, YC, W, H.Tensor must be in shape [B,N,5].
+
+    Args:
+        tensor (tensor): tensor bounding box [XC, YC, W, H], shape [B,N,5]
+
+    Returns:
+        centroids (tensor): Torch tensor of centroids
+    """
+    x = tensor[:,:,0]
+    y = tensor[:,:,1]
+    confidence = tensor[:,:,4]
+    if x.ndim == 1:
+        x.unsqueeze(0)
+    if y.ndim == 1:
+        y.unsqueeze(0)
+    if x.ndim == 3:
+        x.squeeze()
+    if y.ndim == 3:
+        y.squeeze()
+    centroids = torch.stack((x,y,confidence), dim=-1)
+    return centroids
+
 def _find_centroid(tensor: Tensor) -> Tensor:
     """
     Find the centroid of the bounding box given XC, YC, W, H.Tensor must be in shape [5,N].
@@ -72,6 +96,7 @@ def _calculate_l2_true_positives(centroids:Tensor, targets:Tensor, tfit:float) -
     l2 = torch.sqrt(dx**2 + dy**2)
 
     l2_distances = l2.cpu().numpy()
+    # l2_distances = l2_distances.squeeze(-1)
     pred_indices, target_indices = linear_sum_assignment(l2_distances)
     matched_distances = l2_distances[pred_indices, target_indices]
     valid_matches = matched_distances < tfit
@@ -429,23 +454,26 @@ def _centroid_l2_accuracy(preds:list, targets:list, tconfidence:float=.5, tfit:f
     FP = 0
     FN = 0
     for prediction, target in zip(preds, targets):
-        mask = prediction[4] > tconfidence
-        processed_predictions = prediction[:,mask]
-        mask = target[4] != 0
-        processed_targets = target[:,mask]
+        prediction = prediction.transpose(1, 2) 
+        target = target.transpose(1, 2) 
+        for batch_index,preds in enumerate(prediction):
+            mask = preds[:,4] > tconfidence
+            processed_predictions = preds[mask,:]
+            mask = target[batch_index,:,4] != 0
+            processed_targets = target[batch_index,mask,:]
+            tp, fp, fn = _calculate_l2_true_positives(processed_predictions, processed_targets, tfit)
+            TP += tp
+            FP += fp
+            FN += fn
 
-        predicted_centroids = _find_centroid(processed_predictions)
-        target_centroids = _find_centroid(processed_targets)
-        tp, fp, fn = _calculate_l2_true_positives(predicted_centroids, target_centroids, tfit)
-        TP += tp
-        FP += fp
-        FN += fn
+            
+
     recall = TP/(TP+FN+1e-8)
     precision = TP/(TP+FP+1e-8)
     f1 = 2*precision*recall/(precision+recall+1e-8)
     return {f"F1": f1, f"Precision": precision, f"Recall": recall}
 
-def centroid_l2_accuracy(preds:list, targets:list, tconfidence:float=.5, tfit:float=1, image_height=None) -> dict:
+def centroid_l2_accuracy(preds:Tensor, targets:Tensor, tconfidence:float=.5, tfit:float=1, image_height=None) -> dict:
     """
     Calculates the true Positive, false positives, F1 scores for dictionaries of predictions and Outputs.
 
@@ -460,17 +488,17 @@ def centroid_l2_accuracy(preds:list, targets:list, tconfidence:float=.5, tfit:fl
     FP = 0
     FN = 0
     for prediction, target in zip(preds, targets):
-        mask = prediction[4] > tconfidence
-        processed_predictions = prediction[:,mask]
-        mask = target[4] != 0
-        processed_targets = target[:,mask]
-
-        predicted_centroids = _find_centroid(processed_predictions)
-        target_centroids = _find_centroid(processed_targets)
-        tp, fp, fn = _calculate_l2_true_positives(predicted_centroids, target_centroids, tfit)
-        TP += tp
-        FP += fp
-        FN += fn
+        prediction = prediction.transpose(1, 2) 
+        target = target.transpose(1, 2) 
+        for batch_index,preds in enumerate(prediction):
+            mask = preds[:,4] > tconfidence
+            processed_predictions = preds[mask,:]
+            mask = target[batch_index,:,4] != 0
+            processed_targets = target[batch_index,mask,:]
+            tp, fp, fn = _calculate_l2_true_positives(processed_predictions, processed_targets, tfit)
+            TP += tp
+            FP += fp
+            FN += fn
     recall = TP/(TP+FN+1e-8)
     precision = TP/(TP+FP+1e-8)
     f1 = 2*precision*recall/(precision+recall+1e-8)
