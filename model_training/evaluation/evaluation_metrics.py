@@ -488,8 +488,10 @@ def centroid_l2_accuracy(preds:Tensor, targets:Tensor, tconfidence:float=.5, tfi
     FP = 0
     FN = 0
     for prediction, target in zip(preds, targets):
-        prediction = prediction.transpose(1, 2) 
-        target = target.transpose(1, 2) 
+        # prediction = prediction.transpose(1, 2) 
+        # target = target.transpose(1, 2) 
+        prediction = prediction.transpose(0, 1) 
+        target = target.transpose(0, 1) 
         for batch_index,preds in enumerate(prediction):
             mask = preds[:,4] > tconfidence
             processed_predictions = preds[mask,:]

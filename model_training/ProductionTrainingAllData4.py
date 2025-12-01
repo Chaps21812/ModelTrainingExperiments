@@ -27,18 +27,18 @@ if __name__ == "__main__":
     TELESCOPE_D = "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/LMNT01-2025-Annotations"
     TELESCOPE_E = "/data/Dataset_Compilation_and_Statistics/Sentinel_Datasets/ABQ01-2025-Annotations"
     
-    ALL_TELESCOPES = [TELESCOPE_A,TELESCOPE_B, TELESCOPE_C, TELESCOPE_D,TELESCOPE_E]
+    ALL_TELESCOPES = [TELESCOPE_A,TELESCOPE_B, TELESCOPE_C, TELESCOPE_D]
 
     data_limit = [100000]
 
     for DL in data_limit:
         train_params = {
             "project": "Production_Experiments",
-            "experiment_name": f"Raw16-AllData-Resize",
+            "experiment_name": f"Raw16-MidSize-Resize",
             "epochs": 250,
             "batch_size": 42,
             "lr": 1e-4, #sqrt(batch_size)*4e-4
-            "gpu": 1,
+            "gpu": 4,
             "momentum": 0.9,
             "weight_decay": 0.0005, 
             "TConfidence": None,

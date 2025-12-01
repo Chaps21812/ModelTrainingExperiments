@@ -34,18 +34,18 @@ if __name__ == "__main__":
     for DL in data_limit:
         train_params = {
             "project": "Production_Experiments",
-            "experiment_name": f"Raw16-AllData-Resize",
+            "experiment_name": f"Raw16-AllData-NoResize",
             "epochs": 250,
             "batch_size": 42,
             "lr": 1e-4, #sqrt(batch_size)*4e-4
-            "gpu": 1,
+            "gpu": 2,
             "momentum": 0.9,
             "weight_decay": 0.0005, 
             "TConfidence": None,
             "TFit":None,
             "model_path": None,
-            "min_size": 800,
-            "max_size": 1333,
+            "min_size": 512,
+            "max_size": 10000,
             "main_directories": ALL_TELESCOPES,
             "data_limit":200000,
             "preprocess_func":raw_file_16bit.__name__,
